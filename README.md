@@ -1,3 +1,5 @@
+# Adversarial-Learning-for-Neural-Dialogue-Generation-in-Tensorflow
+
 该项目根据论文 Adversarial Learning for Neural Dialogue Generation 实现，论文地址：https://arxiv.org/pdf/1701.06547.pdf
 
 配置说明： 
