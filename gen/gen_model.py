@@ -42,47 +42,6 @@ class Seq2SeqModel(object):
         softmax_loss_function = None
         # Sampled softmax only makes sense if we sample less than vocabulary size.
 
-        # def policy_gradient(logit, labels):
-        #     def softmax(x):
-        #         return tf.exp(x) / tf.reduce_sum(tf.exp(x), reduction_indices=0)
-        #     prob = softmax(logit)
-        #     #token = tf.argmax(logit, 0)
-        #     return tf.to_float(tf.reduce_max(prob))
-        #     pass
-
-        # if num_samples > 0 and num_samples < self.target_vocab_size:
-        #     w_t = tf.get_variable("proj_w", [self.target_vocab_size, self.emb_dim], dtype=dtype)
-        #     w = tf.transpose(w_t)
-        #     b = tf.get_variable("proj_b", [self.target_vocab_size], dtype=dtype)
-        #     output_projection = (w, b)
-        #
-        #     def sampled_loss(inputs, labels):
-        #         self.b = tf.Variable(3, trainable=False)
-        #         labels = tf.reshape(labels, [-1, 1])
-        #         # We need to compute the sampled_softmax_loss using 32bit floats to
-        #         # avoid numerical instabilities.
-        #         local_w_t = tf.cast(w_t, tf.float32)
-        #         local_b = tf.cast(b, tf.float32)
-        #         local_inputs = tf.cast(inputs, tf.float32)
-        #         return tf.cast(
-        #             tf.nn.sampled_softmax_loss(local_w_t, local_b, local_inputs, labels,
-        #                                       num_samples, self.target_vocab_size),
-        #             dtype)
-        #     softmax_loss_function = sampled_loss
-
-        #
-        # if self.up_reward is True:
-        #     softmax_loss_function = policy_gradient
-        #
-        #
-        # softmax_loss_function = control_flow_ops.cond(self.up_reward,
-        #                                       lambda :policy_gradient,
-        #                                       lambda :softmax_loss_function)
-        #softmax_loss_function = policy_gradient
-
-        #loss_function = tf.select(self.up_reward, policy_gradient, softmax_loss_function)
-
-        #softmax_loss_function = loss_function
         # Create the internal multi-layer cell for our RNN.
         single_cell = tf.nn.rnn_cell.GRUCell(self.emb_dim)
         if use_lstm:
@@ -119,103 +78,12 @@ class Seq2SeqModel(object):
 
         # Our targets are decoder inputs shifted by one.
         targets = [self.decoder_inputs[i + 1] for i in xrange(len(self.decoder_inputs) - 1)]
-        # # Training outputs and losses.
-        # if forward_only:
-        #     self.outputs, self.losses, self.encoder_state = rl_seq2seq.model_with_buckets(
-        #         self.encoder_inputs, self.decoder_inputs, targets,
-        #         self.target_weights, self.buckets, lambda x, y: seq2seq_f(x, y, True),
-        #         softmax_loss_function=softmax_loss_function, up_reward=self.up_reward, policy_gradient=policy_gradient)
-        #     # If we use output projection, we need to project outputs for decoding.
-        #     if output_projection is not None:
-        #         for b in xrange(len(self.buckets)):
-        #             self.outputs[b] = [
-        #                 tf.matmul(output, output_projection[0]) + output_projection[1]
-        #                 for output in self.outputs[b]
-        #             ]
-        # else:
-        #     self.outputs, self.losses, self.encoder_state = rl_seq2seq.model_with_buckets(
-        #         self.encoder_inputs, self.decoder_inputs, targets,
-        #         self.target_weights, self.buckets, lambda x, y: seq2seq_f(x, y, False),
-        #         softmax_loss_function=softmax_loss_function, up_reward=self.up_reward, policy_gradient=policy_gradient)
 
         self.outputs, self.losses, self.encoder_state = rl_seq2seq.model_with_buckets(
             self.encoder_inputs, self.decoder_inputs, targets, self.target_weights,
             self.buckets, self.emb_dim, self.batch_size,
             lambda x, y: seq2seq_f(x, y, tf.select(self.forward_only, True, False)),
             output_projection=output_projection, softmax_loss_function=softmax_loss_function)
-        # def output_pro(forward_only, projection):
-        #     if forward_only and (projection is not None):
-        #         for b in xrange(len(self.buckets)):
-        #             self.outputs[b] = [
-        #                 tf.matmul(output, projection[0]) + projection[1] for output in self.outputs[b]
-        #             ]
-        #     return self.outputs
-        #
-        # self.outputs = tf.cond(self.forward_only,
-        #                       lambda: output_pro(True, output_projection),
-        #                       lambda: output_pro(False, output_projection))
-
-        # when forward_only is true ,always doing the tf.matmul operation, but the output_projection is None here.
-        # for b in xrange(len(self.buckets)):
-        #     self.outputs[b] = [
-        #         control_flow_ops.cond(
-        #             self.forward_only,
-        #             lambda: tf.matmul(output, output_projection[0]) + output_projection[1],
-        #             lambda: output
-        #         )
-        #         for output in self.outputs[b]
-        #     ]
-
-        # for j in xrange(len(buckets)):
-        #     output_seq = [int(np.argmax(logit, axis=1)) for logit in self.outputs[j]]
-        # # for reinforcement learning
-        # self.force_dec_input = tf.placeholder(tf.bool, name="force_dec_input")
-        # self.en_output_proj = tf.placeholder(tf.bool, name="en_output_proj")
-        # # Training outputs and losses.
-        # #if forward_only:
-        # self.outputs, self.losses, self.encoder_state = rl_seq2seq.model_with_buckets(
-        #       self.encoder_inputs, self.decoder_inputs, targets,
-        #       self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, tf.select(self.force_dec_input, False, True)),
-        #       softmax_loss_function=softmax_loss_function)
-        #   # If we use output projection, we need to project outputs for decoding.
-        #   #if output_projection is not None:
-        # for b in xrange(len(buckets)):
-        #   self.outputs[b] = [
-        #     control_flow_ops.cond(
-        #       self.en_output_proj,
-        #       lambda: tf.matmul(output, output_projection[0]) + output_projection[1],
-        #       lambda: output
-        #     )
-        #     for output in self.outputs[b]
-        #   ]
-
-        # Gradients and SGD update operation for training the model.
-        # Gradients and SGD update operation for training the model.
-        #self.params = tf.trainable_variables()
-
-        # def is_use_reward(up_reward):
-        #     self.gradient_norms = []
-        #     self.updates = []
-        #     self.gen_params = [p for p in tf.trainable_variables() if self.scope_name in p.name]
-        #
-        #     opt = tf.train.GradientDescentOptimizer(self.learning_rate)
-        #     for b in xrange(len(self.buckets)):
-        #         adjusted_losses = tf.mul(self.losses[b], self.reward[b]) if up_reward else self.losses[b]
-        #         gradients = tf.gradients(adjusted_losses, self.gen_params)
-        #         clipped_gradients, norm = tf.clip_by_global_norm(gradients, self.max_gradient_norm)
-        #         self.gradient_norms.append(norm)
-        #         self.updates.append(opt.apply_gradients(
-        #             zip(clipped_gradients, self.gen_params), global_step=self.global_step))
-        #     return self.losses
-        #
-        # def is_grams_update(forward_only, up_reward):
-        #     if not forward_only:
-        #        return tf.cond(up_reward, lambda: is_use_reward(True), lambda: is_use_reward(False))
-        #     else:
-        #        return self.losses
-        #
-        # tf.cond(self.forward_only, lambda: is_grams_update(True, self.up_reward),
-        #                            lambda: is_grams_update(False, self.up_reward))
 
         with tf.name_scope("gradient_descent"):
             self.gradient_norms = []
@@ -229,21 +97,6 @@ class Seq2SeqModel(object):
                 self.gradient_norms.append(norm)
                 self.updates.append(opt.apply_gradients(
                     zip(clipped_gradients, self.gen_params), global_step=self.global_step))
-
-
-        # if not forward_only:
-        #     self.gradient_norms = []
-        #     self.updates = []
-        #     self.reward = [tf.placeholder(tf.float32, name="reward_%i" % i) for i in range(len(self.buckets))]
-        #     opt = tf.train.GradientDescentOptimizer(self.learning_rate)
-        #     for b in xrange(len(self.buckets)):
-        #         adjusted_losses = tf.mul(self.losses[b], self.reward[b])
-        #         gradients = tf.gradients(adjusted_losses, self.gen_params)
-        #         clipped_gradients, norm = tf.clip_by_global_norm(gradients,
-        #                                                          self.max_gradient_norm)
-        #         self.gradient_norms.append(norm)
-        #         self.updates.append(opt.apply_gradients(
-        #             zip(clipped_gradients, self.gen_params), global_step=self.global_step))
 
         # self.saver = tf.train.Saver(tf.all_variables())
         self.gen_variables = [k for k in tf.global_variables() if self.scope_name in k.name]
