@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Utilities for downloading data from WMT, tokenizing, vocabularies."""
+"""Utilities for downloading disc_data from WMT, tokenizing, vocabularies."""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -44,7 +44,7 @@ UNK_ID = 3
 _WORD_SPLIT = re.compile(b"([.,!?\"':;)(])")
 _DIGIT_RE = re.compile(br"\d")
 
-# URLs for WMT data.
+# URLs for WMT disc_data.
 _WMT_ENFR_TRAIN_URL = "http://www.statmt.org/wmt10/training-giga-fren.tar"
 _WMT_ENFR_DEV_URL = "http://www.statmt.org/wmt15/dev-v2.tgz"
 
@@ -113,7 +113,7 @@ def basic_tokenizer(sentence):
 
 def create_vocabulary(vocabulary_path, data_path_list, max_vocabulary_size,
                       tokenizer=None, normalize_digits=True):
-  """Create vocabulary file (if it does not exist yet) from data file.
+  """Create vocabulary file (if it does not exist yet) from disc_data file.
 
   Data file is assumed to contain one sentence per line. Each sentence is
   tokenized and digits are normalized (if normalize_digits is set).
@@ -123,14 +123,14 @@ def create_vocabulary(vocabulary_path, data_path_list, max_vocabulary_size,
 
   Args:
     vocabulary_path: path where the vocabulary will be created.
-    data_path: data file that will be used to create vocabulary.
+    data_path: disc_data file that will be used to create vocabulary.
     max_vocabulary_size: limit on the size of the created vocabulary.
-    tokenizer: a function to use to tokenize each data sentence;
+    tokenizer: a function to use to tokenize each disc_data sentence;
       if None, basic_tokenizer will be used.
     normalize_digits: Boolean; if true, all digits are replaced by 0s.
   """
   if not gfile.Exists(vocabulary_path):
-    print("Creating vocabulary %s from data %s" % (vocabulary_path, data_path_list))
+    print("Creating vocabulary %s from disc_data %s" % (vocabulary_path, data_path_list))
     vocab = {}
     for data_path in data_path_list:
         with gfile.GFile(data_path, mode="rb") as f:
@@ -217,14 +217,14 @@ def sentence_to_token_ids(sentence, vocabulary,
 
 def data_to_token_ids(data_path, target_path, vocabulary,
                       tokenizer=None, normalize_digits=True):
-  """Tokenize data file and turn into token-ids using given vocabulary file.
+  """Tokenize disc_data file and turn into token-ids using given vocabulary file.
 
-  This function loads data line-by-line from data_path, calls the above
+  This function loads disc_data line-by-line from data_path, calls the above
   sentence_to_token_ids, and saves the result to target_path. See comment
   for sentence_to_token_ids on the details of token-ids format.
 
   Args:
-    data_path: path to the data file in one-sentence-per-line format.
+    data_path: path to the disc_data file in one-sentence-per-line format.
     target_path: path where the file with token-ids will be created.
     vocabulary_path: path to the vocabulary file.
     tokenizer: a function to use to tokenize each sentence;
@@ -232,7 +232,8 @@ def data_to_token_ids(data_path, target_path, vocabulary,
     normalize_digits: Boolean; if true, all digits are replaced by 0s.
   """
   if not gfile.Exists(target_path):
-    print("Tokenizing data in %s" % data_path)
+    print("Tokenizing disc_data in %s" % data_path)
+    #print("target path: ", target_path)
     #vocab, _ = initialize_vocabulary(vocabulary_path)
     with gfile.GFile(data_path, mode="rb") as data_file:
       with gfile.GFile(target_path, mode="w") as tokens_file:
@@ -247,25 +248,25 @@ def data_to_token_ids(data_path, target_path, vocabulary,
 
 
 def prepare_chitchat_data(data_dir, vocabulary, vocabulary_size, tokenizer=None):
-  """Get WMT data into data_dir, create vocabularies and tokenize data.
+  """Get WMT disc_data into data_dir, create vocabularies and tokenize disc_data.
 
   Args:
-    data_dir: directory in which the data sets will be stored.
+    data_dir: directory in which the disc_data sets will be stored.
     en_vocabulary_size: size of the English vocabulary to create and use.
     fr_vocabulary_size: size of the French vocabulary to create and use.
-    tokenizer: a function to use to tokenize each data sentence;
+    tokenizer: a function to use to tokenize each disc_data sentence;
       if None, basic_tokenizer will be used.
 
   Returns:
     A tuple of 6 elements:
-      (1) path to the token-ids for English training data-set,
-      (2) path to the token-ids for French training data-set,
-      (3) path to the token-ids for English development data-set,
-      (4) path to the token-ids for French development data-set,
+      (1) path to the token-ids for English training disc_data-set,
+      (2) path to the token-ids for French training disc_data-set,
+      (3) path to the token-ids for English development disc_data-set,
+      (4) path to the token-ids for French development disc_data-set,
       (5) path to the English vocabulary file,
       (6) path to the French vocabulary file.
   """
-  # Get wmt data to the specified directory.
+  # Get wmt disc_data to the specified directory.
   #train_path = get_wmt_enfr_train_set(data_dir)
   train_path = os.path.join(data_dir, "chitchat.train")
   #dev_path = get_wmt_enfr_dev_set(data_dir)
@@ -286,13 +287,13 @@ def prepare_chitchat_data(data_dir, vocabulary, vocabulary_size, tokenizer=None)
 
   #create_vocabulary(query_vocab_path, voc_query_path, en_vocabulary_size)
 
-  # Create token ids for the training data.
+  # Create token ids for the training disc_data.
   answer_train_ids_path = train_path + (".ids%d.answer" % vocabulary_size)
   query_train_ids_path = train_path + (".ids%d.query" % vocabulary_size)
   data_to_token_ids(train_path + ".answer", answer_train_ids_path, vocabulary, tokenizer)
   data_to_token_ids(train_path + ".query", query_train_ids_path, vocabulary, tokenizer)
 
-  # Create token ids for the development data.
+  # Create token ids for the development disc_data.
   answer_dev_ids_path = dev_path + (".ids%d.answer" % vocabulary_size)
   query_dev_ids_path = dev_path + (".ids%d.query" % vocabulary_size)
   data_to_token_ids(dev_path + ".answer", answer_dev_ids_path, vocabulary, tokenizer)
@@ -300,6 +301,75 @@ def prepare_chitchat_data(data_dir, vocabulary, vocabulary_size, tokenizer=None)
 
   return (query_train_ids_path, answer_train_ids_path,
           query_dev_ids_path, answer_dev_ids_path)
+
+def hier_prepare_disc_data(data_dir, vocabulary, vocabulary_size, tokenizer=None):
+  """Get WMT disc_data into data_dir, create vocabularies and tokenize disc_data.
+
+  Args:
+    data_dir: directory in which the disc_data sets will be stored.
+    en_vocabulary_size: size of the English vocabulary to create and use.
+    fr_vocabulary_size: size of the French vocabulary to create and use.
+    tokenizer: a function to use to tokenize each disc_data sentence;
+      if None, basic_tokenizer will be used.
+
+  Returns:
+    A tuple of 6 elements:
+      (1) path to the token-ids for English training disc_data-set,
+      (2) path to the token-ids for French training disc_data-set,
+      (3) path to the token-ids for English development disc_data-set,
+      (4) path to the token-ids for French development disc_data-set,
+      (5) path to the English vocabulary file,
+      (6) path to the French vocabulary file.
+  """
+  # Get wmt disc_data to the specified directory.
+  #train_path = get_wmt_enfr_train_set(data_dir)
+  train_path = os.path.join(data_dir, "train")
+  #dev_path = get_wmt_enfr_dev_set(data_dir)
+  dev_path = os.path.join(data_dir, "dev")
+
+  # Create token ids for the training disc_data.
+  query_train_ids_path = train_path + (".ids%d.query" % vocabulary_size)
+  answer_train_ids_path = train_path + (".ids%d.answer" % vocabulary_size)
+  gen_train_ids_path = train_path + (".ids%d.gen" % vocabulary_size)
+
+  data_to_token_ids(train_path + ".query", query_train_ids_path, vocabulary, tokenizer)
+  data_to_token_ids(train_path + ".answer", answer_train_ids_path, vocabulary, tokenizer)
+  data_to_token_ids(train_path + ".gen", gen_train_ids_path, vocabulary, tokenizer)
+
+  # Create token ids for the development disc_data.
+  query_dev_ids_path = dev_path + (".ids%d.query" % vocabulary_size)
+  answer_dev_ids_path = dev_path + (".ids%d.answer" % vocabulary_size)
+  gen_dev_ids_path = dev_path + (".ids%d.gen" % vocabulary_size)
+
+  data_to_token_ids(dev_path + ".query", query_dev_ids_path, vocabulary, tokenizer)
+  data_to_token_ids(dev_path + ".answer", answer_dev_ids_path, vocabulary, tokenizer)
+  data_to_token_ids(dev_path + ".gen", gen_dev_ids_path, vocabulary, tokenizer)
+
+  return (query_train_ids_path, answer_train_ids_path, gen_train_ids_path,
+          query_dev_ids_path, answer_dev_ids_path, gen_dev_ids_path)
+
+def prepare_disc_data(data_dir, vocabulary, vocabulary_size, tokenizer=None):
+
+  train_path = os.path.join(data_dir, "train")
+  #dev_path = get_wmt_enfr_dev_set(data_dir)
+  dev_path = os.path.join(data_dir, "dev")
+
+  # Create token ids for the training data.
+  answer_train_ids_path = train_path + (".ids%d.pos" % vocabulary_size)
+  query_train_ids_path = train_path + (".ids%d.neg" % vocabulary_size)
+  data_to_token_ids(train_path + ".pos", answer_train_ids_path, vocabulary, tokenizer)
+  data_to_token_ids(train_path + ".neg", query_train_ids_path, vocabulary, tokenizer)
+
+  # Create token ids for the development data.
+  answer_dev_ids_path = dev_path + (".ids%d.pos" % vocabulary_size)
+  query_dev_ids_path = dev_path + (".ids%d.neg" % vocabulary_size)
+  data_to_token_ids(dev_path + ".pos", answer_dev_ids_path, vocabulary, tokenizer)
+  data_to_token_ids(dev_path + ".neg", query_dev_ids_path, vocabulary, tokenizer)
+
+  return (query_train_ids_path, answer_train_ids_path,
+          query_dev_ids_path, answer_dev_ids_path)
+
+
 
 def prepare_defined_data(data_path, vocabulary, vocabulary_size, tokenizer=None):
   #vocab_path = os.path.join(data_dir, "vocab%d.all" %vocabulary_size)
