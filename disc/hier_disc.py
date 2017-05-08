@@ -1,155 +1,274 @@
-import tensorflow as tf
-import numpy as np
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import math
 import os
-import time
-import datetime
 import random
-import utils.data_utils as data_utils
-from hier_rnn_model import Hier_rnn_model
-from tensorflow.python.platform import gfile
 import sys
+import time
+import pickle
+import heapq
+import tensorflow.python.platform
 
-sys.path.append("../utils")
+import numpy as np
+from six.moves import xrange  # pylint: disable=redefined-builtin
+import tensorflow as tf
 
+import utils.data_utils as data_utils
+import utils.conf as conf
+import gen.gen_model as seq2seq_model
+from tensorflow.python.platform import gfile
+sys.path.append('../utils')
 
-def evaluate(session, model, config, evl_inputs, evl_labels, evl_masks):
-    total_num = len(evl_inputs[0])
+# We use a number of buckets and pad to the closest one for efficiency.
+# See seq2seq_model.Seq2SeqModel for details of how they work.
 
-    fetches = [model.correct_num, model.prediction, model.logits, model.target]
-    feed_dict = {}
-    for i in xrange(config.max_len):
-        feed_dict[model.input_data[i].name] = evl_inputs[i]
-    # feed_dict[model.input_data]=evl_inputs
-    feed_dict[model.target.name] = evl_labels
-    feed_dict[model.mask_x.name] = evl_masks
-    # model.assign_new_batch_size(session,len(evl_inputs))
-    # state = session.run(model._initial_state)
-    # for i , (c,h) in enumerate(model._initial_state):
-    #     feed_dict[c]=state[i].c
-    #     feed_dict[h]=state[i].h
-    correct_num, prediction, logits, target = session.run(fetches, feed_dict)
+def read_data(config, source_path, target_path, max_size=None):
+    data_set = [[] for _ in config.buckets]
+    with gfile.GFile(source_path, mode="r") as source_file:
+        with gfile.GFile(target_path, mode="r") as target_file:
+            source, target = source_file.readline(), target_file.readline()
+            counter = 0
+            while source and target and (not max_size or counter < max_size):
+                counter += 1
+                if counter % 100000 == 0:
+                    print("  reading disc_data line %d" % counter)
+                    sys.stdout.flush()
+                source_ids = [int(x) for x in source.split()]
+                target_ids = [int(x) for x in target.split()]
+                target_ids.append(data_utils.EOS_ID)
+                for bucket_id, (source_size, target_size) in enumerate(config.buckets): #[bucket_id, (source_size, target_size)]
+                    if len(source_ids) < source_size and len(target_ids) < target_size:
+                       data_set[bucket_id].append([source_ids, target_ids])
+                       break
+                source, target = source_file.readline(), target_file.readline()
+    return data_set
 
-    print("total_num: ", total_num)
-    print("correct_num: ", correct_num)
-    print("prediction: ", prediction)
-    # print("logits: ", logits)
-    print("target: ", target)
-
-    accuracy = float(correct_num) / total_num
-    return accuracy
-
-
-def hier_read_data(query_path, answer_path, gen_path, max_len=None):
-    query_set = []
-    answer_set = []
-    gen_set = []
-    with gfile.GFile(query_path, mode="r") as query_file:
-        with gfile.GFile(answer_path, mode="r") as answer_file:
-            with gfile.GFile(gen_path, mode="r") as gen_file:
-                query, answer, gen = query_file.readline(), answer_file.readline(), gen_file.readline()
-                counter = 0
-                while query and answer and gen:
-                    counter += 1
-                    if counter % 100000 == 0:
-                        print("  reading disc_data line %d" % counter)
-                    query = [int(id) for id in query.strip().split()]
-                    query = query[:max_len] + [data_utils.PAD_ID] * (max_len - len(query) if max_len > len(query) else 0)
-                    #print("query: ", query)
-                    query_set.append(query)
-                    answer = [int(id) for id in answer.strip().split()]
-                    answer = answer[:max_len] + [data_utils.PAD_ID] * (max_len - len(answer) if max_len > len(answer) else 0)
-                    answer_set.append(answer)
-                    gen = [int(id) for id in gen.strip().split()]
-                    gen = gen[:max_len] + [data_utils.PAD_ID] * (max_len - len(gen) if max_len > len(gen) else 0)
-                    gen_set.append(gen)
-                    query, answer, gen = query_file.readline(), answer_file.readline(), gen_file.readline()
-
-    return query_set, answer_set, gen_set
-
-
-def hier_get_batch(config, max_set, query_set, answer_set, gen_set):
-    batch_size = config.batch_size
-    if batch_size % 2 == 1:
-        return IOError("Error")
-    train_query = []
-    train_answer = []
-    label = []
-    half_size = batch_size / 2
-    for _ in range(half_size):
-        index = random.randint(0, max_set)
-        train_query.append(query_set[index])
-        train_answer.append(answer_set[index])
-        label.append(1)
-        train_query.append(query_set[index])
-        train_answer.append(gen_set[index])
-        label.append(0)
-    return train_query, train_answer, label
-
-
-def create_model(sess, config, initializer=None, name="disc_model"):
+def create_model(session, gen_config, initializer=None, name="gen_model"):
+    """Create translation model and initialize or load parameters in session."""
     with tf.variable_scope(name_or_scope=name, initializer=initializer):
-        model = Hier_rnn_model(config=config)
-        disc_ckpt_dir = os.path.abspath(os.path.join(config.data_dir, "checkpoints"))
-        ckpt = tf.train.get_checkpoint_state(disc_ckpt_dir)
+        model = seq2seq_model.Seq2SeqModel(gen_config)
+        gen_ckpt_dir = os.path.abspath(os.path.join(gen_config.data_dir, "checkpoints"))
+        ckpt = tf.train.get_checkpoint_state(gen_ckpt_dir)
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
-            print("Reading Hier Disc model parameters from %s" % ckpt.model_checkpoint_path)
-            model.saver.restore(sess, ckpt.model_checkpoint_path)
+            print("Reading Gen model parameters from %s" % ckpt.model_checkpoint_path)
+            model.saver.restore(session, ckpt.model_checkpoint_path)
         else:
-            print("Created Hier Disc model with fresh parameters.")
-            sess.run(tf.global_variables_initializer())
+            print("Created Gen model with fresh parameters.")
+            session.run(tf.global_variables_initializer())
         return model
 
+def prepare_data(gen_config):
+    train_path = os.path.join(gen_config.data_dir, "chitchat.train")
+    voc_file_path = [train_path+".answer", train_path+".query"]
+    vocab_path = os.path.join(gen_config.data_dir, "vocab%d.all" % gen_config.vocab_size)
+    data_utils.create_vocabulary(vocab_path, voc_file_path, gen_config.vocab_size)
+    vocab, rev_vocab = data_utils.initialize_vocabulary(vocab_path)
 
-def hier_train_step(config_disc, config_evl):
-    config = config_disc
-    eval_config = config_evl
-    eval_config.keep_prob = 1.0
+    print("Preparing Chitchat disc_data in %s" % gen_config.data_dir)
+    train_query, train_answer, dev_query, dev_answer = data_utils.prepare_chitchat_data(
+        gen_config.data_dir, vocab, gen_config.vocab_size)
 
-    print("begin training")
+    # Read disc_data into buckets and compute their sizes.
+    print ("Reading development and training disc_data (limit: %d)."
+               % gen_config.max_train_data_size)
+    dev_set = read_data(gen_config, dev_query, dev_answer)
+    train_set = read_data(gen_config, train_query, train_answer, gen_config.max_train_data_size)
 
-    with tf.Graph().as_default(), tf.Session() as session:
-        model = create_model(session, config)
+    return vocab, rev_vocab, dev_set, train_set
 
-        train_path = os.path.join(config.data_dir, "train")
-        voc_file_path = [train_path + ".query", train_path + ".answer", train_path + ".gen"]
-        vocab_path = os.path.join(config.data_dir, "vocab%d.all" % config.vocabulary_size)
-        data_utils.create_vocabulary(vocab_path, voc_file_path, config.vocabulary_size)
-        vocab, rev_vocab = data_utils.initialize_vocabulary(vocab_path)
+def softmax(x):
+    prob = np.exp(x) / np.sum(np.exp(x), axis=0)
+    return prob
 
-        print("Preparing train disc_data in %s" % config.data_dir)
-        train_query_path, train_answer_path, train_gen_path, dev_query_path, dev_answer_path, dev_gen_path = \
-            data_utils.hier_prepare_disc_data(config.data_dir, vocab, config.vocabulary_size)
+def train(gen_config):
+    vocab, rev_vocab, dev_set, train_set = prepare_data(gen_config)
+    for b_set in train_set:
+        print("b_set: ", len(b_set))
 
-        query_set, answer_set, gen_set = hier_read_data(train_query_path, train_answer_path, train_gen_path, config.max_len)
-        #dev_query_set, dev_answer_set, dev_gen_set = hier_read_data(dev_query_path, dev_answer_path, dev_gen_path)
-        print("query_set: ", len(query_set))
-        current_time = 1
+    with tf.Session() as sess:
+    #with tf.device("/gpu:1"):
+        # Create model.
+        print("Creating %d layers of %d units." % (gen_config.num_layers, gen_config.emb_dim))
+        model = create_model(sess, gen_config)
+
+        train_bucket_sizes = [len(train_set[b]) for b in xrange(len(gen_config.buckets))]
+        train_total_size = float(sum(train_bucket_sizes))
+        train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
+                               for i in xrange(len(train_bucket_sizes))]
+
+        # This is the training loop.
+        step_time, loss = 0.0, 0.0
+        current_step = 0
+        previous_losses = []
+
+        step_loss_summary = tf.Summary()
+        #merge = tf.merge_all_summaries()
+        writer = tf.summary.FileWriter("../logs/", sess.graph)
+
         while True:
-            train_query, train_answer, label = hier_get_batch(config, len(query_set)-1, query_set, answer_set,
-                                                                  gen_set)
-            train_query = np.reshape(train_query, (config.max_len, -1))
-            train_answer = np.reshape(train_answer, (config.max_len, -1))
+            # Choose a bucket according to disc_data distribution. We pick a random number
+            # in [0, 1] and use the corresponding interval in train_buckets_scale.
+            random_number_01 = np.random.random_sample()
+            bucket_id = min([i for i in xrange(len(train_buckets_scale))
+                           if train_buckets_scale[i] > random_number_01])
 
-            feed_dict = {}
-            for i in xrange(config.max_len):
-                feed_dict[model.query[i].name] = train_query[i]
-                feed_dict[model.answer[i].name] = train_answer[i]
-            feed_dict[model.target.name] = label
-            #feed_dict[model.forward_only.name] = False
+            # Get a batch and make a step.
+            start_time = time.time()
+            encoder_inputs, decoder_inputs, target_weights, batch_source_encoder, batch_source_decoder = model.get_batch(
+                train_set, bucket_id, gen_config.batch_size)
 
-            fetches = [model.train_op, model.logits, model.loss, model.cost, model.target]
-            train_op, logits, loss, cost, target = session.run(fetches, feed_dict)
+            print("bucket_id: ", bucket_id)
+            print("encoder_inputs: ", np.shape(encoder_inputs))
+            print("decoder_inputs: ", np.shape(decoder_inputs))
+            print("target_weights: ", np.shape(target_weights))
 
-            if current_time % 200 == 0:
-                #print("norm: ", norm)
-                print("train_op: ", train_op)
-                print("logits: ", logits)
-                print("target: ", target)
-                print("cost: ", cost)
-                disc_ckpt_dir = os.path.abspath(os.path.join(config.data_dir, "checkpoints"))
-                if not os.path.exists(disc_ckpt_dir):
-                    os.makedirs(disc_ckpt_dir)
-                disc_model_path = os.path.join(disc_ckpt_dir, "disc.model")
-                model.saver.save(session, disc_model_path, global_step=model.global_step)
-            current_time += 1
+            _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=False)
 
+            step_time += (time.time() - start_time) / gen_config.steps_per_checkpoint
+            loss += step_loss / gen_config.steps_per_checkpoint
+            current_step += 1
+
+            # Once in a while, we save checkpoint, print statistics, and run evals.
+            if current_step % gen_config.steps_per_checkpoint == 0:
+
+                bucket_value = step_loss_summary.value.add()
+                bucket_value.tag = "loss"
+                bucket_value.simple_value = float(loss)
+                writer.add_summary(step_loss_summary, current_step)
+
+                # Print statistics for the previous epoch.
+                perplexity = math.exp(loss) if loss < 300 else float('inf')
+                print ("global step %d learning rate %.4f step-time %.2f perplexity "
+                       "%.2f" % (model.global_step.eval(), model.learning_rate.eval(),
+                                 step_time, perplexity))
+                # Decrease learning rate if no improvement was seen over last 3 times.
+                if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
+                    sess.run(model.learning_rate_decay_op)
+                previous_losses.append(loss)
+                # Save checkpoint and zero timer and loss.
+                gen_ckpt_dir = os.path.abspath(os.path.join(gen_config.data_dir, "checkpoints"))
+                if not os.path.exists(gen_ckpt_dir):
+                    os.makedirs(gen_ckpt_dir)
+                checkpoint_path = os.path.join(gen_ckpt_dir, "chitchat.model")
+                model.saver.save(sess, checkpoint_path, global_step=model.global_step)
+                step_time, loss = 0.0, 0.0
+                # Run evals on development set and print their perplexity.
+                # for bucket_id in xrange(len(gen_config.buckets)):
+                #   encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+                #       dev_set, bucket_id)
+                #   _, eval_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
+                #                                target_weights, bucket_id, True)
+                #   eval_ppx = math.exp(eval_loss) if eval_loss < 300 else float('inf')
+                #   print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
+                sys.stdout.flush()
+
+def decoder(sess, gen_config, model, vocab, encoder_inputs, decoder_inputs, target_inputs, forward_only=True, mc_search=False):
+    pass
+
+def get_predicted_sentence(sess, input_token_ids, vocab, model,
+                           beam_size, buckets, mc_search=True,debug=False):
+    def model_step(enc_inp, dec_inp, dptr, target_weights, bucket_id):
+        #model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
+        _, _, logits = model.step(sess, enc_inp, dec_inp, target_weights, bucket_id, True)
+        prob = softmax(logits[dptr][0])
+        # print("model_step @ %s" % (datetime.now()))
+        return prob
+
+    def greedy_dec(output_logits):
+        selected_token_ids = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+        # if data_utils.EOS_ID in selected_token_ids:
+        #   eos = selected_token_ids.index(data_utils.EOS_ID)
+        #   selected_token_ids = selected_token_ids[:eos]
+        #output_sentence = ' '.join([rev_vocab[t] for t in selected_token_ids])
+        return selected_token_ids
+
+    #input_token_ids = data_utils.sentence_to_token_ids(input_sentence, vocab)
+    # Which bucket does it belong to?
+    bucket_id = min([b for b in range(len(buckets)) if buckets[b][0] > len(input_token_ids)])
+    outputs = []
+    feed_data = {bucket_id: [(input_token_ids, outputs)]}
+
+    # Get a 1-element batch to feed the sentence to the model.   None,bucket_id, True
+    encoder_inputs, decoder_inputs, target_weights, _, _ = model.get_batch(feed_data, bucket_id, 1)
+    if debug: print("\n[get_batch]\n", encoder_inputs, decoder_inputs, target_weights)
+
+    ### Original greedy decoding
+    if beam_size == 1 or (not mc_search):
+        _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
+        return [{"dec_inp": greedy_dec(output_logits), 'prob': 1}]
+
+    # Get output logits for the sentence. # initialize beams as (log_prob, empty_string, eos)
+    beams, new_beams, results = [(1, {'eos': 0, 'dec_inp': decoder_inputs, 'prob': 1, 'prob_ts': 1, 'prob_t': 1})], [], []
+
+    for dptr in range(len(decoder_inputs)-1):
+      if dptr > 0:
+        target_weights[dptr] = [1.]
+        beams, new_beams = new_beams[:beam_size], []
+      if debug: print("=====[beams]=====", beams)
+      heapq.heapify(beams)  # since we will srot and remove something to keep N elements
+      for prob, cand in beams:
+        if cand['eos']:
+          results += [(prob, cand)]
+          continue
+
+        all_prob_ts = model_step(encoder_inputs, cand['dec_inp'], dptr, target_weights, bucket_id)
+        all_prob_t  = [0]*len(all_prob_ts)
+        all_prob    = all_prob_ts
+
+        # suppress copy-cat (respond the same as input)
+        if dptr < len(input_token_ids):
+          all_prob[input_token_ids[dptr]] = all_prob[input_token_ids[dptr]] * 0.01
+
+        # beam search
+        for c in np.argsort(all_prob)[::-1][:beam_size]:
+          new_cand = {
+            'eos'     : (c == data_utils.EOS_ID),
+            'dec_inp' : [(np.array([c]) if i == (dptr+1) else k) for i, k in enumerate(cand['dec_inp'])],
+            'prob_ts' : cand['prob_ts'] * all_prob_ts[c],
+            'prob_t'  : cand['prob_t'] * all_prob_t[c],
+            'prob'    : cand['prob'] * all_prob[c],
+          }
+          new_cand = (new_cand['prob'], new_cand) # for heapq can only sort according to list[0]
+
+          if (len(new_beams) < beam_size):
+            heapq.heappush(new_beams, new_cand)
+          elif (new_cand[0] > new_beams[0][0]):
+            heapq.heapreplace(new_beams, new_cand)
+
+    results += new_beams  # flush last cands
+
+    # post-process results
+    res_cands = []
+    for prob, cand in sorted(results, reverse=True):
+      res_cands.append(cand)
+    return res_cands
+
+def gen_sample(sess ,gen_config, model, vocab, source_inputs, source_outputs, mc_search=True):
+    sample_inputs = []
+    sample_labels =[]
+    rep = []
+
+    for source_query, source_answer in zip(source_inputs, source_outputs):
+        sample_inputs.append(source_query+source_answer)
+        sample_labels.append(1)
+        responses = get_predicted_sentence(sess, source_query, vocab,
+                                           model, gen_config.beam_size, _buckets, mc_search)
+
+        for resp in responses:
+            if gen_config.beam_size == 1 or (not mc_search):
+                dec_inp = [dec for dec in resp['dec_inp']]
+                rep.append(dec_inp)
+                dec_inp = dec_inp[:]
+            else:
+                dec_inp = [dec.tolist()[0] for dec in resp['dec_inp'][:]]
+                rep.append(dec_inp)
+                dec_inp = dec_inp[1:]
+            print("  (%s) -> %s" % (resp['prob'], dec_inp))
+            sample_neg = source_query + dec_inp
+            sample_inputs.append(sample_neg)
+            sample_labels.append(0)
+
+    return sample_inputs, sample_labels, rep
+    pass
