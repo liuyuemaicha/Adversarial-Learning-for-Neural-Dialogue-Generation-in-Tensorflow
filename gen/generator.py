@@ -21,47 +21,43 @@ import gen.gen_model as seq2seq_model
 from tensorflow.python.platform import gfile
 sys.path.append('../utils')
 
-
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
-_buckets = [(5, 10), (10, 15), (20, 25), (40, 50), (50, 50)]
 
-def read_data(source_path, target_path, max_size=None):
-  data_set = [[] for _ in _buckets]
-  with gfile.GFile(source_path, mode="r") as source_file:
-    with gfile.GFile(target_path, mode="r") as target_file:
-      source, target = source_file.readline(), target_file.readline()
-      counter = 0
-      while source and target and (not max_size or counter < max_size):
-        counter += 1
-        if counter % 100000 == 0:
-          print("  reading data line %d" % counter)
-          sys.stdout.flush()
-        source_ids = [int(x) for x in source.split()]
-        target_ids = [int(x) for x in target.split()]
-        target_ids.append(data_utils.EOS_ID)
-        for bucket_id, (source_size, target_size) in enumerate(_buckets): #[bucket_id, (source_size, target_size)]
-          if len(source_ids) < source_size and len(target_ids) < target_size:
-            data_set[bucket_id].append([source_ids, target_ids])
-            break
-        source, target = source_file.readline(), target_file.readline()
-  return data_set
+def read_data(config, source_path, target_path, max_size=None):
+    data_set = [[] for _ in config.buckets]
+    with gfile.GFile(source_path, mode="r") as source_file:
+        with gfile.GFile(target_path, mode="r") as target_file:
+            source, target = source_file.readline(), target_file.readline()
+            counter = 0
+            while source and target and (not max_size or counter < max_size):
+                counter += 1
+                if counter % 100000 == 0:
+                    print("  reading disc_data line %d" % counter)
+                    sys.stdout.flush()
+                source_ids = [int(x) for x in source.split()]
+                target_ids = [int(x) for x in target.split()]
+                target_ids.append(data_utils.EOS_ID)
+                for bucket_id, (source_size, target_size) in enumerate(config.buckets): #[bucket_id, (source_size, target_size)]
+                    if len(source_ids) < source_size and len(target_ids) < target_size:
+                       data_set[bucket_id].append([source_ids, target_ids])
+                       break
+                source, target = source_file.readline(), target_file.readline()
+    return data_set
 
-def create_model(session, gen_config, forward_only):
+def create_model(session, gen_config, initializer=None, name="gen_model"):
     """Create translation model and initialize or load parameters in session."""
-    model = seq2seq_model.Seq2SeqModel(
-      gen_config.vocab_size, gen_config.vocab_size, _buckets,
-      gen_config.size, gen_config.num_layers, gen_config.max_gradient_norm, gen_config.batch_size,
-      gen_config.learning_rate, gen_config.learning_rate_decay_factor, forward_only=forward_only)
-
-    ckpt = tf.train.get_checkpoint_state(gen_config.train_dir)
-    if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
-        print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
-        model.saver.restore(session, ckpt.model_checkpoint_path)
-    else:
-        print("Created Gen_RNN model with fresh parameters.")
-        session.run(tf.global_variables_initializer())
-    return model
+    with tf.variable_scope(name_or_scope=name, initializer=initializer):
+        model = seq2seq_model.Seq2SeqModel(gen_config)
+        gen_ckpt_dir = os.path.abspath(os.path.join(gen_config.data_dir, "checkpoints"))
+        ckpt = tf.train.get_checkpoint_state(gen_ckpt_dir)
+        if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+            print("Reading Gen model parameters from %s" % ckpt.model_checkpoint_path)
+            model.saver.restore(session, ckpt.model_checkpoint_path)
+        else:
+            print("Created Gen model with fresh parameters.")
+            session.run(tf.global_variables_initializer())
+        return model
 
 def prepare_data(gen_config):
     train_path = os.path.join(gen_config.data_dir, "chitchat.train")
@@ -70,15 +66,15 @@ def prepare_data(gen_config):
     data_utils.create_vocabulary(vocab_path, voc_file_path, gen_config.vocab_size)
     vocab, rev_vocab = data_utils.initialize_vocabulary(vocab_path)
 
-    print("Preparing Chitchat data in %s" % gen_config.data_dir)
+    print("Preparing Chitchat disc_data in %s" % gen_config.data_dir)
     train_query, train_answer, dev_query, dev_answer = data_utils.prepare_chitchat_data(
         gen_config.data_dir, vocab, gen_config.vocab_size)
 
-    # Read data into buckets and compute their sizes.
-    print ("Reading development and training data (limit: %d)."
+    # Read disc_data into buckets and compute their sizes.
+    print ("Reading development and training disc_data (limit: %d)."
                % gen_config.max_train_data_size)
-    dev_set = read_data(dev_query, dev_answer)
-    train_set = read_data(train_query, train_answer, gen_config.max_train_data_size)
+    dev_set = read_data(gen_config, dev_query, dev_answer)
+    train_set = read_data(gen_config, train_query, train_answer, gen_config.max_train_data_size)
 
     return vocab, rev_vocab, dev_set, train_set
 
@@ -87,16 +83,17 @@ def softmax(x):
     return prob
 
 def train(gen_config):
-    """Train a en->fr translation model using WMT data."""
     vocab, rev_vocab, dev_set, train_set = prepare_data(gen_config)
+    for b_set in train_set:
+        print("b_set: ", len(b_set))
 
     with tf.Session() as sess:
     #with tf.device("/gpu:1"):
         # Create model.
-        print("Creating %d layers of %d units." % (gen_config.num_layers, gen_config.size))
-        model = create_model(sess, gen_config,False)
+        print("Creating %d layers of %d units." % (gen_config.num_layers, gen_config.emb_dim))
+        model = create_model(sess, gen_config)
 
-        train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
+        train_bucket_sizes = [len(train_set[b]) for b in xrange(len(gen_config.buckets))]
         train_total_size = float(sum(train_bucket_sizes))
         train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
                                for i in xrange(len(train_bucket_sizes))]
@@ -111,7 +108,7 @@ def train(gen_config):
         writer = tf.summary.FileWriter("../logs/", sess.graph)
 
         while True:
-            # Choose a bucket according to data distribution. We pick a random number
+            # Choose a bucket according to disc_data distribution. We pick a random number
             # in [0, 1] and use the corresponding interval in train_buckets_scale.
             random_number_01 = np.random.random_sample()
             bucket_id = min([i for i in xrange(len(train_buckets_scale))
@@ -120,10 +117,14 @@ def train(gen_config):
             # Get a batch and make a step.
             start_time = time.time()
             encoder_inputs, decoder_inputs, target_weights, batch_source_encoder, batch_source_decoder = model.get_batch(
-                train_set, bucket_id, 0)
+                train_set, bucket_id, gen_config.batch_size)
 
-            _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
-                                           target_weights, bucket_id, forward_only=False)
+            print("bucket_id: ", bucket_id)
+            print("encoder_inputs: ", np.shape(encoder_inputs))
+            print("decoder_inputs: ", np.shape(decoder_inputs))
+            print("target_weights: ", np.shape(target_weights))
+
+            _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=False)
 
             step_time += (time.time() - start_time) / gen_config.steps_per_checkpoint
             loss += step_loss / gen_config.steps_per_checkpoint
@@ -147,11 +148,14 @@ def train(gen_config):
                     sess.run(model.learning_rate_decay_op)
                 previous_losses.append(loss)
                 # Save checkpoint and zero timer and loss.
-                checkpoint_path = os.path.join(gen_config.train_dir, "chitchat.model")
+                gen_ckpt_dir = os.path.abspath(os.path.join(gen_config.data_dir, "checkpoints"))
+                if not os.path.exists(gen_ckpt_dir):
+                    os.makedirs(gen_ckpt_dir)
+                checkpoint_path = os.path.join(gen_ckpt_dir, "chitchat.model")
                 model.saver.save(sess, checkpoint_path, global_step=model.global_step)
                 step_time, loss = 0.0, 0.0
                 # Run evals on development set and print their perplexity.
-                # for bucket_id in xrange(len(_buckets)):
+                # for bucket_id in xrange(len(gen_config.buckets)):
                 #   encoder_inputs, decoder_inputs, target_weights = model.get_batch(
                 #       dev_set, bucket_id)
                 #   _, eval_loss, _ = model.step(sess, encoder_inputs, decoder_inputs,
@@ -160,22 +164,25 @@ def train(gen_config):
                 #   print("  eval: bucket %d perplexity %.2f" % (bucket_id, eval_ppx))
                 sys.stdout.flush()
 
+def decoder(sess, gen_config, model, vocab, encoder_inputs, decoder_inputs, target_inputs, forward_only=True, mc_search=False):
+    pass
+
 def get_predicted_sentence(sess, input_token_ids, vocab, model,
                            beam_size, buckets, mc_search=True,debug=False):
     def model_step(enc_inp, dec_inp, dptr, target_weights, bucket_id):
         #model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
-      _, _, logits = model.step(sess, enc_inp, dec_inp, target_weights, bucket_id, True)
-      prob = softmax(logits[dptr][0])
-      # print("model_step @ %s" % (datetime.now()))
-      return prob
+        _, _, logits = model.step(sess, enc_inp, dec_inp, target_weights, bucket_id, True)
+        prob = softmax(logits[dptr][0])
+        # print("model_step @ %s" % (datetime.now()))
+        return prob
 
     def greedy_dec(output_logits):
-      selected_token_ids = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-      # if data_utils.EOS_ID in selected_token_ids:
-      #   eos = selected_token_ids.index(data_utils.EOS_ID)
-      #   selected_token_ids = selected_token_ids[:eos]
-      #output_sentence = ' '.join([rev_vocab[t] for t in selected_token_ids])
-      return selected_token_ids
+        selected_token_ids = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+        # if data_utils.EOS_ID in selected_token_ids:
+        #   eos = selected_token_ids.index(data_utils.EOS_ID)
+        #   selected_token_ids = selected_token_ids[:eos]
+        #output_sentence = ' '.join([rev_vocab[t] for t in selected_token_ids])
+        return selected_token_ids
 
     #input_token_ids = data_utils.sentence_to_token_ids(input_sentence, vocab)
     # Which bucket does it belong to?
@@ -184,7 +191,7 @@ def get_predicted_sentence(sess, input_token_ids, vocab, model,
     feed_data = {bucket_id: [(input_token_ids, outputs)]}
 
     # Get a 1-element batch to feed the sentence to the model.   None,bucket_id, True
-    encoder_inputs, decoder_inputs, target_weights, _, _ = model.get_batch(feed_data, bucket_id, 0)
+    encoder_inputs, decoder_inputs, target_weights, _, _ = model.get_batch(feed_data, bucket_id, 1)
     if debug: print("\n[get_batch]\n", encoder_inputs, decoder_inputs, target_weights)
 
     ### Original greedy decoding
@@ -239,7 +246,6 @@ def get_predicted_sentence(sess, input_token_ids, vocab, model,
     return res_cands
 
 def gen_sample(sess ,gen_config, model, vocab, source_inputs, source_outputs, mc_search=True):
-
     sample_inputs = []
     sample_labels =[]
     rep = []
@@ -265,4 +271,3 @@ def gen_sample(sess ,gen_config, model, vocab, source_inputs, source_outputs, mc
             sample_labels.append(0)
 
     return sample_inputs, sample_labels, rep
-    pass
