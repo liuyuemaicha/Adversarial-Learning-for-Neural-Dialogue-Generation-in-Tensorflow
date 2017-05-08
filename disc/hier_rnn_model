@@ -29,7 +29,6 @@ class Hier_rnn_model(object):
             context_cell = tf.nn.rnn_cell.BasicLSTMCell(num_units=emb_dim)
             context_multi = tf.nn.rnn_cell.MultiRNNCell([context_cell] * hidden_layer_num)
 
-
             self.b_query_state = []
             self.b_answer_state = []
             self.b_state = []
@@ -108,8 +107,6 @@ def main(_):
         train_op, query, state, logits = sess.run(fetches=fetches, feed_dict=input_feed)
 
         print("query: ", np.shape(query))
-
-
     pass
 
 if __name__ == '__main__':
