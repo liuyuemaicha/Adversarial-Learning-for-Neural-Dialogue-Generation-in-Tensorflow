@@ -23,8 +23,25 @@ from tensorflow.python.util import nest
 linear = rnn_cell._linear  # pylint: disable=protected-access
 
 
-def _extract_argmax_and_embed(embedding, output_projection=None,
-                              update_embedding=True):
+def _argmax_or_mcsearch(embedding, output_projection=None, update_embedding=True, mc_search=False):
+    def loop_function(prev, _):
+        if output_projection is not None:
+            prev = nn_ops.xw_plus_b(prev, output_projection[0], output_projection[1])
+
+
+        if isinstance(mc_search, bool):
+            prev_symbol = tf.reshape(tf.multinomial(prev, 1), [-1]) if mc_search else math_ops.argmax(prev, 1)
+        else:
+            prev_symbol = tf.cond(mc_search, lambda: tf.reshape(tf.multinomial(prev, 1), [-1]), lambda: tf.argmax(prev, 1))
+
+
+        emb_prev = embedding_ops.embedding_lookup(embedding, prev_symbol)
+        if not update_embedding:
+            emb_prev = array_ops.stop_gradient(emb_prev)
+        return emb_prev
+    return loop_function
+
+def _extract_argmax_and_embed(embedding, output_projection=None, update_embedding=True):
   """Get a loop_function that extracts the previous symbol and embeds it.
 
   Args:
@@ -546,7 +563,8 @@ def embedding_attention_decoder(decoder_inputs,
                                 update_embedding_for_previous=True,
                                 dtype=None,
                                 scope=None,
-                                initial_state_attention=False):
+                                initial_state_attention=False,
+                                mc_search = False):
   """RNN decoder with embedding and attention and a pure-decoding option.
 
   Args:
@@ -602,9 +620,20 @@ def embedding_attention_decoder(decoder_inputs,
 
     embedding = variable_scope.get_variable("embedding",
                                             [num_symbols, embedding_size])
-    loop_function = _extract_argmax_and_embed(
-        embedding, output_projection,
-        update_embedding_for_previous) if feed_previous else None
+
+    loop_function = None
+    if feed_previous == True:
+        loop_function = _argmax_or_mcsearch(embedding, output_projection, update_embedding_for_previous, mc_search)
+    # if isinstance(mc_search, bool):
+    #     if feed_previous == True and mc_search == True:
+    #         loop_function = _mc_argmax_and_embed(embedding, output_projection, update_embedding_for_previous)
+    #     elif feed_previous == True and mc_search == False:
+    #         loop_function = _extract_argmax_and_embed(embedding, output_projection, update_embedding_for_previous)
+    # elif (feed_previous == True):
+    #     loop_function = control_flow_ops.cond(mc_search,
+    #                           _mc_argmax_and_embed(embedding, output_projection, update_embedding_for_previous),
+    #                           _extract_argmax_and_embed(embedding, output_projection, update_embedding_for_previous))
+
     emb_inp = [
         embedding_ops.embedding_lookup(embedding, i) for i in decoder_inputs]
     return attention_decoder(
@@ -630,7 +659,8 @@ def embedding_attention_seq2seq(encoder_inputs,
                                 feed_previous=False,
                                 dtype=None,
                                 scope=None,
-                                initial_state_attention=False):
+                                initial_state_attention=False,
+                                mc_search=False):
 
   with variable_scope.variable_scope(
       scope or "embedding_attention_seq2seq", dtype=dtype) as scope:
@@ -666,6 +696,7 @@ def embedding_attention_seq2seq(encoder_inputs,
           output_projection=output_projection,
           feed_previous=feed_previous,
           initial_state_attention=initial_state_attention,
+          mc_search=mc_search,
           scope=scope)
       return outputs, state, encoder_state
 
@@ -687,6 +718,7 @@ def embedding_attention_seq2seq(encoder_inputs,
             feed_previous=feed_previous_bool,
             update_embedding_for_previous=False,
             initial_state_attention=initial_state_attention,
+            mc_search=mc_search,
             scope=scope)
         state_list = [state]
         if nest.is_sequence(state):
@@ -812,27 +844,59 @@ def one2many_rnn_seq2seq(encoder_inputs,
   return outputs_dict, state_dict
 
 
+# def sequence_loss_by_mle(logits, targets, emb_dim, sequence_length, batch_size, name=None):
+#     pass
+#     if len(targets) != len(logits) or len(weights) != len(logits):
+#         raise ValueError("Lengths of logits, weights, and targets must be the same "
+#                          "%d, %d, %d." % (len(logits), len(weights), len(targets)))
+#     with ops.name_scope(name, "sequence_loss_by_mle",
+#                         logits + targets + weights):
+#
+#         pretrain_loss = -tf.reduce_sum(
+#             tf.one_hot(tf.to_int32(tf.reshape(targets, [-1])), emb_dim, 1.0, 0.0) * tf.log(
+#                 tf.clip_by_value(tf.reshape(logits, [-1, emb_dim]), 1e-20, 1.0)
+#             )
+#         ) / (sequence_length * batch_size)
+#
+#
+#
+#         log_perp_list = []
+#         for logit, target, weight in zip(logits, targets, weights):
+#             pass
+
+# def sequence_loss_by_example(logits, targets, weights,
+#                              average_across_timesteps=True,
+#                              softmax_loss_function=None,up_reward=None, policy_gradient=None, name=None):
+#   if len(targets) != len(logits) or len(weights) != len(logits):
+#     raise ValueError("Lengths of logits, weights, and targets must be the same "
+#                      "%d, %d, %d." % (len(logits), len(weights), len(targets)))
+#   with ops.name_scope(name, "sequence_loss_by_example",
+#                       logits + targets + weights):
+#     log_perp_list = []
+#     for logit, target, weight in zip(logits, targets, weights):
+#       if softmax_loss_function is None:
+#         # TODO(irving,ebrevdo): This reshape is needed because
+#         # sequence_loss_by_example is called with scalars sometimes, which
+#         # violates our general scalar strictness policy.
+#         target = array_ops.reshape(target, [-1])
+#         crossent = nn_ops.sparse_softmax_cross_entropy_with_logits(
+#             logit, target)
+#       else:
+#         #crossent = softmax_loss_function(logit, target)
+#         crossent = tf.cond(up_reward,
+#                            lambda :policy_gradient(logit, target),
+#                            lambda :softmax_loss_function(logit,target))
+#       log_perp_list.append(crossent * weight)
+#     log_perps = math_ops.add_n(log_perp_list)
+#     if average_across_timesteps:
+#       total_size = math_ops.add_n(weights)
+#       total_size += 1e-12  # Just to avoid division by 0 for all-0 weights.
+#       log_perps /= total_size
+#   return log_perps
+
 def sequence_loss_by_example(logits, targets, weights,
                              average_across_timesteps=True,
                              softmax_loss_function=None, name=None):
-  """Weighted cross-entropy loss for a sequence of logits (per example).
-
-  Args:
-    logits: List of 2D Tensors of shape [batch_size x num_decoder_symbols].
-    targets: List of 1D batch-sized int32 Tensors of the same length as logits.
-    weights: List of 1D batch-sized float-Tensors of the same length as logits.
-    average_across_timesteps: If set, divide the returned cost by the total
-      label weight.
-    softmax_loss_function: Function (inputs-batch, labels-batch) -> loss-batch
-      to be used instead of the standard softmax (the default if this is None).
-    name: Optional name for this operation, default: "sequence_loss_by_example".
-
-  Returns:
-    1D batch-sized float Tensor: The log-perplexity for each sequence.
-
-  Raises:
-    ValueError: If len(logits) is different from len(targets) or len(weights).
-  """
   if len(targets) != len(logits) or len(weights) != len(logits):
     raise ValueError("Lengths of logits, weights, and targets must be the same "
                      "%d, %d, %d." % (len(logits), len(weights), len(targets)))
@@ -891,10 +955,28 @@ def sequence_loss(logits, targets, weights,
     else:
       return cost
 
+def sequence_loss_by_mle(logits, targets, emb_dim, sequence_length, batch_size, output_projection=None):
+    #print("logits: ", np.shape(logits[0]))
+    #logits: [seq_len, batch_size, emb_dim]
+    #targets: [seq_len, batch_size]  =====transpose====> [batch_size, seq_len]
+    labels = tf.to_int32(tf.reshape(targets, [-1]))
+    #labels = tf.to_int32(tf.transpose(targets))
 
-def model_with_buckets(encoder_inputs, decoder_inputs, targets, weights,
-                       buckets, seq2seq, softmax_loss_function=None,
-                       per_example_loss=False, name=None):
+    if output_projection is not None:
+      logits = nn_ops.xw_plus_b(logits, output_projection[0], output_projection[1])
+
+    reshape_logits = tf.reshape(logits, [-1, emb_dim])
+
+    prediction = tf.clip_by_value(reshape_logits, 1e-20, 1.0)
+
+    pretrain_loss = -tf.reduce_sum(
+        tf.one_hot(labels, emb_dim, 1.0, 0.0) * tf.log(prediction)
+    ) / (sequence_length * batch_size)
+    return pretrain_loss
+
+
+def model_with_buckets(encoder_inputs, decoder_inputs, targets, weights, buckets, emb_dim, batch_size, seq2seq,
+                       output_projection=None, softmax_loss_function=None, per_example_loss=False, name=None):
   if len(encoder_inputs) < buckets[-1][0]:
     raise ValueError("Length of encoder_inputs (%d) must be at least that of la"
                      "st bucket (%d)." % (len(encoder_inputs), buckets[-1][0]))
@@ -923,8 +1005,7 @@ def model_with_buckets(encoder_inputs, decoder_inputs, targets, weights,
               outputs[-1], targets[:bucket[1]], weights[:bucket[1]],
               softmax_loss_function=softmax_loss_function))
         else:
-          losses.append(sequence_loss(
-              outputs[-1], targets[:bucket[1]], weights[:bucket[1]],
-              softmax_loss_function=softmax_loss_function))
+          losses.append(sequence_loss_by_mle(outputs[-1], targets[:bucket[1]], emb_dim, bucket[1], batch_size, output_projection))
+          #losses.append(sequence_loss(outputs[-1], targets[:bucket[1]], weights[:bucket[1]], softmax_loss_function=softmax_loss_function))
 
   return outputs, losses, encoder_states
