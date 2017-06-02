@@ -955,27 +955,30 @@ def sequence_loss(logits, targets, weights,
     else:
       return cost
 
-def sequence_loss_by_mle(logits, targets, emb_dim, sequence_length, batch_size, output_projection=None):
+def sequence_loss_by_mle(logits, targets, vocab_size, sequence_length, batch_size, output_projection=None):
     #print("logits: ", np.shape(logits[0]))
     #logits: [seq_len, batch_size, emb_dim]
     #targets: [seq_len, batch_size]  =====transpose====> [batch_size, seq_len]
+    # labels = tf.to_int32(tf.transpose(targets))
+    #targets: [seq_len, batch_size] ====reshape[-1]====> [seq_len * batch_size]
     labels = tf.to_int32(tf.reshape(targets, [-1]))
-    #labels = tf.to_int32(tf.transpose(targets))
 
     if output_projection is not None:
-      logits = nn_ops.xw_plus_b(logits, output_projection[0], output_projection[1])
+      #logits = nn_ops.xw_plus_b(logits, output_projection[0], output_projection[1])
+      logits = [tf.matmul(logit, output_projection[0]) + output_projection[1] for logit in logits]
 
-    reshape_logits = tf.reshape(logits, [-1, emb_dim])
+    reshape_logits = tf.reshape(logits, [-1, vocab_size]) #[seq_len * batch_size, vocab_size]
 
     prediction = tf.clip_by_value(reshape_logits, 1e-20, 1.0)
 
     pretrain_loss = -tf.reduce_sum(
-        tf.one_hot(labels, emb_dim, 1.0, 0.0) * tf.log(prediction)
+        # [seq_len * batch_size , vocab_size]
+        tf.one_hot(labels, vocab_size, 1.0, 0.0) * tf.log(prediction)
     ) / (sequence_length * batch_size)
     return pretrain_loss
 
 
-def model_with_buckets(encoder_inputs, decoder_inputs, targets, weights, buckets, emb_dim, batch_size, seq2seq,
+def model_with_buckets(encoder_inputs, decoder_inputs, targets, weights, buckets, vocab_size, batch_size, seq2seq,
                        output_projection=None, softmax_loss_function=None, per_example_loss=False, name=None):
   if len(encoder_inputs) < buckets[-1][0]:
     raise ValueError("Length of encoder_inputs (%d) must be at least that of la"
@@ -1005,7 +1008,7 @@ def model_with_buckets(encoder_inputs, decoder_inputs, targets, weights, buckets
               outputs[-1], targets[:bucket[1]], weights[:bucket[1]],
               softmax_loss_function=softmax_loss_function))
         else:
-          losses.append(sequence_loss_by_mle(outputs[-1], targets[:bucket[1]], emb_dim, bucket[1], batch_size, output_projection))
-          #losses.append(sequence_loss(outputs[-1], targets[:bucket[1]], weights[:bucket[1]], softmax_loss_function=softmax_loss_function))
+          # losses.append(sequence_loss_by_mle(outputs[-1], targets[:bucket[1]], vocab_size, bucket[1], batch_size, output_projection))
+          losses.append(sequence_loss(outputs[-1], targets[:bucket[1]], weights[:bucket[1]], softmax_loss_function=softmax_loss_function))
 
   return outputs, losses, encoder_states
