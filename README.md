@@ -45,5 +45,5 @@ def main(_):
 
 2、生成器模型使用的是Seq2Seq模型（TensorFlow自带）
 
-3、对抗学习训练中reward值的计算方式使用的Monte Carlo Search（beam search实现）
+3、对抗学习训练中reward值的计算方式使用的Monte Carlo Search
 
