@@ -13,6 +13,7 @@ al_neural_dialogue项目说明：
   data：         存放了分类器的预训练数据；
   
  gen_data：    存放了生成器的训练数据；
+ 
  disc_data:    存放分类器的预训练数据
  
   disc：         分类器模型的相关代码文件；
@@ -20,6 +21,14 @@ al_neural_dialogue项目说明：
   gen:           生成器模型的相关代码文件；
   
  utils：         数据操作和配置相关代码文件
+
+
+notice：项目中没有训练数据目录，所以需要在主目录下创建gen_data和disc_data两个文件夹。
+
+gen_data中有chitchat.train.answer, chitchat.train.query, chitchat.dev.answer, chitchat.dev.query四个文件
+
+disc_data中有disc.dev.answer,disc.dev.query, disc.dev.gen 和 disc.train.answer, disc.train.query，disc.tran.gen六个文件
+
 
 2.文件
 
