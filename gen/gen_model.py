@@ -118,20 +118,22 @@ class Seq2SeqModel(object):
             with tf.name_scope("gradient_descent"):
                 self.gradient_norms = []
                 self.updates = []
+                self.aj_losses= []
                 self.gen_params = [p for p in tf.trainable_variables() if name_scope in p.name]
                 #opt = tf.train.GradientDescentOptimizer(self.learning_rate)
                 opt = tf.train.AdamOptimizer()
                 for b in xrange(len(self.buckets)):
                     R =  tf.sub(self.reward[b], self.reward_bias)
                     # self.reward[b] = self.reward[b] - reward_bias
-                    self.adjusted_losses = tf.cond(self.up_reward,
+                    adjusted_loss = tf.cond(self.up_reward,
                                               lambda:tf.mul(self.losses[b], R),
                                               lambda: self.losses[b])
 
                     # adjusted_losses =  tf.cond(self.up_reward,
                     #                           lambda: tf.mul(self.losses[b], R),
                     #                           lambda: self.losses[b])
-                    gradients = tf.gradients(self.adjusted_losses, self.gen_params)
+                    self.aj_losses.append(adjusted_loss)
+                    gradients = tf.gradients(adjusted_loss, self.gen_params)
                     clipped_gradients, norm = tf.clip_by_global_norm(gradients, self.max_gradient_norm)
                     self.gradient_norms.append(norm)
                     self.updates.append(opt.apply_gradients(
@@ -176,7 +178,7 @@ class Seq2SeqModel(object):
         # Output feed: depends on whether we do a backward step or not.
         if not forward_only: # normal training
             output_feed = [self.updates[bucket_id],  # Update Op that does SGD.
-                       self.adjusted_losses,  # Gradient norm.
+                       self.aj_losses,  # Gradient norm.
                        self.losses[bucket_id]]  # Loss for this batch.
         else: # testing or reinforcement learning
             output_feed = [self.encoder_state[bucket_id], self.losses[bucket_id]]  # Loss for this batch.
