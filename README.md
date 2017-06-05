@@ -1,58 +1,68 @@
 # Adversarial-Learning-for-Neural-Dialogue-Generation-in-Tensorflow
 
-该项目根据论文 Adversarial Learning for Neural Dialogue Generation 实现，论文地址：https://arxiv.org/pdf/1701.06547.pdf
+the paper: Adversarial Learning for Neural Dialogue Generation    https://arxiv.org/pdf/1701.06547.pdf
 
-配置说明： 
+## Config:
 
-TensorFlow版本 0.12.0  Python版本 2.7
+TensorFlow 0.12.0  Python 2.7
 
-al_neural_dialogue项目说明：
+## Introduction to Project: al_neural_dialogue 
 
-1.目录名
+### 1.
 
-  data：         存放了分类器的预训练数据；
   
- gen_data：    存放了生成器的训练数据；
+ gen_data：    training data for gen model
  
- disc_data:    存放分类器的预训练数据
+ disc_data:    training data for disc model
  
-  disc：         分类器模型的相关代码文件；
+  disc：       code about disc model
   
-  gen:           生成器模型的相关代码文件；
+  gen:         code about gen model
   
- utils：         数据操作和配置相关代码文件
+ utils：       code about data operation and model config
+
+**notice:**
+
+**gen_data** include  chitchat.train.answer, chitchat.train.query, chitchat.dev.answer, chitchat.dev.query (total four files)
+
+**disc_data**  include disc.dev.answer,disc.dev.query, disc.dev.gen 和 disc.train.answer, disc.train.query，disc.tran.gen   (total six files)
+
+**formula of training data**   one sentence one row and splited with space, eg:  i don ' t want to !
+
+### 2.files
+
+al_neural_dialogue_train.py   the start code file
+
+### 3.run
+
+python al_neural_dialogue_train.py
 
 
-notice：项目中没有训练数据目录，所以需要在主目录下创建gen_data和disc_data两个文件夹。
-
-gen_data中有chitchat.train.answer, chitchat.train.query, chitchat.dev.answer, chitchat.dev.query四个文件
-
-disc_data中有disc.dev.answer,disc.dev.query, disc.dev.gen 和 disc.train.answer, disc.train.query，disc.tran.gen六个文件
-
-
-2.文件
-
-al_neural_dialogue_train.py  :   对抗学习的训练代码文件
-
-3.运行
-
-进入al_neural_dialogue项目后，运行当前目录下的al_neural_dialogue_train.py文件： python al_neural_dialogue_train.py
-
-文件"al_neural_dialogue_train.py"中main函数说明
-
+**introduction**
 def main(_):
-    #gen_pre_train()   预训练生成器；
-    #gen_disc()   生成器生成分类器的训练数据
-    #disc_pre_train()   预训练分类器；
-    
-    al_train()        训练对抗学习模型；	
-	
-	
-模型算法说明：
+   # step_1 training gen model
+    gen_pre_train()
 
-1、分类器模型使用的是分级多层LSTM模型（层数可以自己配置）
+    # model test
+    # gen_test()
 
-2、生成器模型使用的是Seq2Seq模型（TensorFlow自带）
+    # step_2 gen training data for disc
+    # gen_disc()
 
-3、对抗学习训练中reward值的计算方式使用的Monte Carlo Search
+    # step_3 training disc model
+    # disc_pre_train()
+
+    # step_4 training al model
+    # al_train()
+
+    # model test
+    # gen_test() 
+
+**model introduction**
+
+1、disc model : hierarchical rnn
+
+2  gen model : seq2seq model with attention (GRU cell)
+
+3、method of reward : Monte Carlo Search
 
