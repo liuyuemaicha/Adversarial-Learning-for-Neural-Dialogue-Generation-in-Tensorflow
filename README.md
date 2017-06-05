@@ -39,7 +39,9 @@ python al_neural_dialogue_train.py
 
 
 **introduction**
+
 def main(_):
+
    # step_1 training gen model
     gen_pre_train()
 
@@ -62,7 +64,7 @@ def main(_):
 
 1、disc model : hierarchical rnn
 
-2  gen model : seq2seq model with attention (GRU cell)
+2、gen model : seq2seq model with attention (GRU cell)
 
 3、method of reward : Monte Carlo Search
 
