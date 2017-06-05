@@ -11,9 +11,9 @@ TensorFlow 0.12.0  Python 2.7
 ### 1.
 
   
- gen_data：    training data for gen model (you can create yourself in the main directory)
+ gen_data：    training data for gen model
  
- disc_data:    training data for disc model (you can create yourself in the main directory)
+ disc_data:    training data for disc model
  
   disc：       code about disc model
   
