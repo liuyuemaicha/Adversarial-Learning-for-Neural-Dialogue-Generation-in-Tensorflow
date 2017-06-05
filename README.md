@@ -1,6 +1,8 @@
 # Adversarial-Learning-for-Neural-Dialogue-Generation-in-Tensorflow
 
 the paper: Adversarial Learning for Neural Dialogue Generation    https://arxiv.org/pdf/1701.06547.pdf
+
+
 the paper translation in Chinese :http://blog.csdn.net/liuyuemaicha/article/details/60581187
 ## Config:
 
