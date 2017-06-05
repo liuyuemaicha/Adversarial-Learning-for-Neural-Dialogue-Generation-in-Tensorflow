@@ -7,7 +7,7 @@ import numpy as np
 import cPickle as pkl
 
 #file path
-dataset_path='data/subj0.pkl'
+dataset_path='disc_data/subj0.pkl'
 
 def set_dataset_path(path):
     dataset_path=path
@@ -17,7 +17,7 @@ def set_dataset_path(path):
 
 def load_data(debug, max_len,batch_size,n_words=20000,valid_portion=0.1,sort_by_len=True):
     f=open(dataset_path,'rb')
-    print ('load data from %s',dataset_path)
+    print ('load disc_data from %s',dataset_path)
     train_set = np.array(pkl.load(f))
     test_set = np.array(pkl.load(f))
     print("train_set: ", np.shape(train_set))

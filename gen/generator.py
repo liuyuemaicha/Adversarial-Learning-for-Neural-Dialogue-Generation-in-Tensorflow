@@ -122,11 +122,6 @@ def train(gen_config):
             encoder_inputs, decoder_inputs, target_weights, batch_source_encoder, batch_source_decoder = model.get_batch(
                 train_set, bucket_id, gen_config.batch_size)
 
-            # print("bucket_id: ", bucket_id)
-            # print("encoder_inputs: ", np.shape(encoder_inputs))
-            # print("decoder_inputs: ", np.shape(decoder_inputs))
-            # print("target_weights: ", np.shape(target_weights))
-
             _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=False)
 
             step_time += (time.time() - start_time) / gen_config.steps_per_checkpoint
@@ -252,14 +247,8 @@ def decoder(gen_config):
             tokens = []
             resps = []
             for seq in out_logits:
-                # print("seq: %s" %seq)
                 token = []
                 for t in seq:
-                    # print("seq_t: %s" %t)
-                    # t = list(t)
-                    # print("list(t): %s" %t)
-                    # t = np.array(t)
-                    # print("array(t): %s" %t)
                     token.append(int(np.argmax(t, axis=0)))
                 tokens.append(token)
             tokens_t = []
@@ -328,11 +317,6 @@ def decoder_bk(gen_config):
                 # print("seq: %s" %seq)
                 token = []
                 for t in seq:
-                    # print("seq_t: %s" %t)
-                    # t = list(t)
-                    # print("list(t): %s" %t)
-                    # t = np.array(t)
-                    # print("array(t): %s" %t)
                     token.append(int(np.argmax(t, axis=0)))
                 tokens.append(token)
             tokens_t = []
@@ -373,10 +357,6 @@ def get_predicted_sentence(sess, input_token_ids, vocab, model,
 
     def greedy_dec(output_logits):
         selected_token_ids = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-        # if data_utils.EOS_ID in selected_token_ids:
-        #   eos = selected_token_ids.index(data_utils.EOS_ID)
-        #   selected_token_ids = selected_token_ids[:eos]
-        #output_sentence = ' '.join([rev_vocab[t] for t in selected_token_ids])
         return selected_token_ids
 
     #input_token_ids = data_utils.sentence_to_token_ids(input_sentence, vocab)

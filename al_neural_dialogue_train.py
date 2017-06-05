@@ -13,8 +13,6 @@ import utils.data_utils as data_utils
 gen_config = conf.gen_config
 disc_config = conf.disc_config
 evl_config = conf.disc_config
-#al_config = conf.al_cofig
-#steps_per_checkpoint = 100
 
 
 # pre train discriminator
@@ -26,22 +24,21 @@ def disc_pre_train():
 # pre train generator
 def gen_pre_train():
     gens.train(gen_config)
-    # gens.test_decoder(gen_config)
-    # gens.decoder(gen_config)
 
 
 # gen data for disc training
-def gen2disc():
+def gen_disc():
     gens.decoder(gen_config)
+
+
+# test gen model
+def gen_test():
+    gens.test_decoder(gen_config)
 
 
 # prepare disc_data for discriminator and generator
 def disc_train_data(sess, gen_model, vocab, source_inputs, source_outputs,
                     encoder_inputs, decoder_inputs, target_weights, bucket_id, mc_search=False):
-    #  sample_inputs, sample_labels, responses = gens.gen_sample(sess, gen_config, gen_model, vocab,
-    #                                            source_inputs, source_outputs, mc_search=mc_search)
-    # outputs = gens.decoder(sess, gen_config, gen_model, vocab, encoder_inputs, decoder_inputs, target_inputs, mc_search)
-    # step(self, session, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True, up_reward=False, reward=None, mc_search=False, debug=True):
     train_query, train_answer = [], []
     query_len = gen_config.buckets[bucket_id][0]
     answer_len = gen_config.buckets[bucket_id][1]
@@ -54,51 +51,23 @@ def disc_train_data(sess, gen_model, vocab, source_inputs, source_outputs,
         train_answer.append(answer)
         train_labels = [1 for _ in source_inputs]
 
-    # print("bucket_id: ", bucket_id)
-    # print("encoder_inputs:", encoder_inputs)
-    # print("decoder_inputs:", decoder_inputs)
-    # print("target_weights:", target_weights)
-
 
     def decoder(num_roll):
-        # sample_inputs = np.hstack((source_inputs, source_outputs))
-        # sample_labels = [1 for _ in xrange(gen_config.batch_size)]
-        # sample_inputs.append(train_data)
         for _ in xrange(num_roll):
             _, _, output_logits = gen_model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id,
                                                  forward_only=True, mc_search=mc_search)
 
-            # # output_logits: [seq_len, batch_size, emb_dim]
-            # # outputs: [seq_len, batch_size] ==(transpose)==> [batch_size, seq_len]
-            # outputs = [np.argmax(logit, axis=1) for logit in output_logits]
-            # # for output in outputs:
-            # #     print ("output len: ", len(output))
-            # outputs = np.transpose(outputs)
-
-
-            # print("output_logits: ", np.shape(output_logits))
-
             seq_tokens = []
             resps = []
             for seq in output_logits:
-                # print("seq: %s" %seq)
                 row_token = []
                 for t in seq:
-                    # print("seq_t: %s" %t)
-                    # t = list(t)
-                    # print("list(t): %s" %t)
-                    # t = np.array(t)
-                    # print("array(t): %s" %t)
                     row_token.append(int(np.argmax(t, axis=0)))
                 seq_tokens.append(row_token)
-
-            # print("seq_tokens: ", np.shape(seq_tokens))
 
             seq_tokens_t = []
             for col in range(len(seq_tokens[0])):
                 seq_tokens_t.append([seq_tokens[row][col] for row in range(len(seq_tokens))])
-
-            # print("seq_tokens_t: ", np.shape(seq_tokens_t))
 
             for seq in seq_tokens_t:
                 if data_utils.EOS_ID in seq:
@@ -119,10 +88,6 @@ def disc_train_data(sess, gen_model, vocab, source_inputs, source_outputs,
     else:
         train_query, train_answer, train_labels = decoder(1)
 
-    #print("disc_train_data, mc_search: ", mc_search)
-    # for query, answer, label in zip(train_query, train_answer, train_labels):
-    #     print(str(label) + "\t" + str(query) + ":\t" + str(answer))
-
     return train_query, train_answer, train_labels
 
 
@@ -135,16 +100,11 @@ def softmax(x):
 def disc_step(sess, bucket_id, disc_model, train_query, train_answer, train_labels, forward_only=False):
     feed_dict={}
 
-    # print("disc_step bucket_id: ", bucket_id)
-    # print("disc_step query len : ", len(train_query))
     for i in xrange(len(train_query)):
 
-        # print("disc_step train_query ", train_query[i])
         feed_dict[disc_model.query[i].name] = train_query[i]
 
-    # print("disc_step answer len : ", len(train_answer))
     for i in xrange(len(train_answer)):
-        # print("disc_step train_answer ", train_answer[i])
         feed_dict[disc_model.answer[i].name] = train_answer[i]
 
     feed_dict[disc_model.target.name]=train_labels
@@ -158,16 +118,8 @@ def disc_step(sess, bucket_id, disc_model, train_query, train_answer, train_labe
         fetches = [disc_model.b_train_op[bucket_id], disc_model.b_loss[bucket_id], disc_model.b_logits[bucket_id]]
         train_op, loss, logits = sess.run(fetches,feed_dict)
 
-    #print("logits shape: ", np.shape(logits))
-
     # softmax operation
     logits = np.transpose(softmax(np.transpose(logits)))
-
-    # print("disc_step logits shape: ", np.shape(logits))
-
-    # print("disc_step logits: ", logits)
-    # print("disc_step train_labels  : ", train_labels)
-    # print("train_labels  : ", np.shape(train_labels))
 
     reward, gen_num = 0.0, 0
     for logit, label in zip(logits, train_labels):
@@ -176,7 +128,6 @@ def disc_step(sess, bucket_id, disc_model, train_query, train_answer, train_labe
             gen_num += 1
     reward = reward / gen_num
 
-    # print("disc_step the train reward is  " ,reward)
     return reward, loss
 
 
@@ -216,8 +167,6 @@ def al_train():
             # 1.Sample (X,Y) from real disc_data
             # print("bucket_id: %d" %bucket_id)
             encoder_inputs, decoder_inputs, target_weights, source_inputs, source_outputs = gen_model.get_batch(train_set, bucket_id, gen_config.batch_size)
-            # print ("source_inputs: ", len(source_inputs))
-            # print ("source_outputs: ", len(source_outputs))
 
             # 2.Sample (X,Y) and (X, ^Y) through ^Y ~ G(*|X)
             train_query, train_answer, train_labels = disc_train_data(sess, gen_model, vocab, source_inputs, source_outputs,
@@ -229,7 +178,6 @@ def al_train():
                 print("train_labels: ", len(train_labels))
                 for i in xrange(len(train_query)):
                     print("lable: ", train_labels[i])
-                    # print(" ".join([tf.compat.as_str(rev_vocab[output]) for output in train_query[i]]))
                     print("train_answer_sentence: ", train_answer[i])
                     print(" ".join([tf.compat.as_str(rev_vocab[output]) for output in train_answer[i]]))
 
@@ -250,10 +198,9 @@ def al_train():
                                                                 encoder, decoder, weights, bucket_id, mc_search=True)
 
             print("=============================mc_search: True====================================")
-            for i in xrange(len(train_query)):
-                if current_step % 200 == 0:
+            if current_step % 200 == 0:
+                for i in xrange(len(train_query)):
                     print("lable: ", train_labels[i])
-                    # print(" ".join([tf.compat.as_str(rev_vocab[output]) for output in train_query[i]]))
                     print(" ".join([tf.compat.as_str(rev_vocab[output]) for output in train_answer[i]]))
 
             train_query = np.transpose(train_query)
@@ -265,7 +212,7 @@ def al_train():
             print("step_reward: ", reward)
 
             # 4.Update G on (X, ^Y ) using reward r
-            gan_adjusted_loss, gen_step_loss, a =gen_model.step(sess, encoder, decoder, weights, bucket_id, forward_only=False,
+            gan_adjusted_loss, gen_step_loss, _ =gen_model.step(sess, encoder, decoder, weights, bucket_id, forward_only=False,
                                            reward=reward, up_reward=True, debug=True)
             gen_loss += gen_step_loss / gen_config.steps_per_checkpoint
 
@@ -323,10 +270,24 @@ def al_train():
 
 
 def main(_):
-    disc_pre_train()
-    # gen_pre_train()
-    # al_train()
+    # step_1 training gen model
+    gen_pre_train()
+
+    # model test
+    # gen_test()
+
+    # step_2 gen training data for disc
     # gen_disc()
+
+    # step_3 training disc model
+    # disc_pre_train()
+
+    # step_4 training al model
+    # al_train()
+
+    # model test
+    # gen_test()
+
 
 if __name__ == "__main__":
     tf.app.run()

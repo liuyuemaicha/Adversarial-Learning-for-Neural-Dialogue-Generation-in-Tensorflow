@@ -19,20 +19,13 @@ def evaluate(session, model, config, evl_inputs, evl_labels, evl_masks):
     feed_dict = {}
     for i in xrange(config.max_len):
         feed_dict[model.input_data[i].name] = evl_inputs[i]
-    # feed_dict[model.input_data]=evl_inputs
     feed_dict[model.target.name] = evl_labels
     feed_dict[model.mask_x.name] = evl_masks
-    # model.assign_new_batch_size(session,len(evl_inputs))
-    # state = session.run(model._initial_state)
-    # for i , (c,h) in enumerate(model._initial_state):
-    #     feed_dict[c]=state[i].c
-    #     feed_dict[h]=state[i].h
     correct_num, prediction, logits, target = session.run(fetches, feed_dict)
 
     print("total_num: ", total_num)
     print("correct_num: ", correct_num)
     print("prediction: ", prediction)
-    # print("logits: ", logits)
     print("target: ", target)
 
     accuracy = float(correct_num) / total_num
@@ -157,11 +150,6 @@ def hier_train(config_disc, config_evl):
             b_query, b_answer, b_gen = query_set[bucket_id], answer_set[bucket_id], gen_set[bucket_id]
 
             train_query, train_answer, train_labels = hier_get_batch(config_disc, len(b_query)-1, b_query, b_answer, b_gen)
-            # train_query = np.reshape(train_query, (config_disc.max_len, -1))
-            # train_answer = np.reshape(train_answer, (config_disc.max_len, -1))
-            print("train_query size: ", np.shape(train_query))
-            print("train_answer size: ", np.shape(train_answer))
-            #print("train_gen size: ", np.shape(train_gen))
 
             train_query = np.transpose(train_query)
             train_answer = np.transpose(train_answer)
@@ -172,7 +160,6 @@ def hier_train(config_disc, config_evl):
             for i in xrange(config_disc.buckets[bucket_id][1]):
                 feed_dict[model.answer[i].name] = train_answer[i]
             feed_dict[model.target.name] = train_labels
-            #feed_dict[model.forward_only.name] = False
 
             fetches = [model.b_train_op[bucket_id], model.b_logits[bucket_id], model.b_loss[bucket_id], model.target]
             train_op, logits, step_loss, target = session.run(fetches, feed_dict)
@@ -201,11 +188,6 @@ def hier_train(config_disc, config_evl):
                 print("reward: ", reward)
 
 
-
-                #print("norm: ", norm)
-                #print("train_op: ", train_op)
-                #print("logits: ", logits)
-                #print("target: ", target)
                 print("current_step: %d, step_loss: %.4f" %(current_step, step_loss))
 
 
