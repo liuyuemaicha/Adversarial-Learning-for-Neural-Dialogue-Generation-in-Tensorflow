@@ -42,7 +42,7 @@ python al_neural_dialogue_train.py
 def main(_):
 
     # step_1 training gen model
-    gen_pre_train()
+    # gen_pre_train()
 
     # model test
     # gen_test()
