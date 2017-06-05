@@ -11,9 +11,9 @@ TensorFlow 0.12.0  Python 2.7
 ### 1.
 
   
- gen_data：    training data for gen model
+ gen_data：    training data for gen model (you can create yourself in the main directory)
  
- disc_data:    training data for disc model
+ disc_data:    training data for disc model (you can create yourself in the main directory)
  
   disc：       code about disc model
   
@@ -29,17 +29,16 @@ TensorFlow 0.12.0  Python 2.7
 
 **formula of training data**   one sentence one row and splited with space, eg:  i don ' t want to !
 
-### 2.files
 
-al_neural_dialogue_train.py   the start code file
+### 2.run
 
-### 3.run
 
 python al_neural_dialogue_train.py
 
 
 **introduction**
-'''
+
+
 def main(_):
 
     # step_1 training gen model
@@ -59,10 +58,11 @@ def main(_):
 
     # model test
     # gen_test() 
-'''
+
+
 **model introduction**
 
-1、disc model : hierarchical rnn
+1、disc model : hierarchical rnn (A diversity-promoting objective function for neural conversation models)
 
 2、gen model : seq2seq model with attention (GRU cell)
 
