@@ -39,7 +39,7 @@ python al_neural_dialogue_train.py
 
 
 **introduction**
-
+'''
 def main(_):
 
     # step_1 training gen model
@@ -59,7 +59,7 @@ def main(_):
 
     # model test
     # gen_test() 
-
+'''
 **model introduction**
 
 1、disc model : hierarchical rnn
