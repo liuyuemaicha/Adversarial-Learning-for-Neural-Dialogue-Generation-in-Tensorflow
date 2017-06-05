@@ -1,7 +1,7 @@
 # Adversarial-Learning-for-Neural-Dialogue-Generation-in-Tensorflow
 
 the paper: Adversarial Learning for Neural Dialogue Generation    https://arxiv.org/pdf/1701.06547.pdf
-
+the paper translation in Chinese :http://blog.csdn.net/liuyuemaicha/article/details/60581187
 ## Config:
 
 TensorFlow 0.12.0  Python 2.7
@@ -41,7 +41,10 @@ python al_neural_dialogue_train.py
 
 def main(_):
 
+'''
     # step_1 training gen model
+    
+    
     # gen_pre_train()
 
     # model test
@@ -58,7 +61,7 @@ def main(_):
 
     # model test
     # gen_test() 
-
+'''
 
 **model introduction**
 
