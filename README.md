@@ -68,9 +68,11 @@ def main(_):
 
 **model introduction**
 
-1、disc model : hierarchical rnn (A diversity-promoting objective function for neural conversation models)
+1、disc model : hierarchical rnn (paper——Building end-to-end dialogue systems using generative hierarchical neural network models)
 
 2、gen model : seq2seq model with attention (GRU cell)
 
 3、method of reward : Monte Carlo Search
+
+4、optimal：Policy Gradient
 
