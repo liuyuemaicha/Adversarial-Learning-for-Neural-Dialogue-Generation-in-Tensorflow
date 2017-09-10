@@ -49,7 +49,7 @@ def read_data(config, source_path, target_path, max_size=None):
 def create_model(session, gen_config, forward_only, name_scope, initializer=None):
     """Create translation model and initialize or load parameters in session."""
     with tf.variable_scope(name_or_scope=name_scope, initializer=initializer):
-        model = seq2seq_model.Seq2SeqModel(gen_config,  name_scope=name_scope, forward_only=forward_only)
+        model = seq2seq_model.Seq2SeqModel(gen_config,  name_scope=name_scope, forward_only=forward_only,dtype=tf.float32)
         gen_ckpt_dir = os.path.abspath(os.path.join(gen_config.train_dir, "checkpoints"))
         ckpt = tf.train.get_checkpoint_state(gen_ckpt_dir)
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
@@ -98,7 +98,7 @@ def train(gen_config):
         print("Creating %d layers of %d units." % (gen_config.num_layers, gen_config.emb_dim))
         model = create_model(sess, gen_config, forward_only=False, name_scope=gen_config.name_model)
 
-        train_bucket_sizes = [len(train_set[b]) for b in xrange(len(gen_config.buckets))]
+        train_bucket_sizes = [len(train_set[b]) for b in range(len(gen_config.buckets))]
         train_total_size = float(sum(train_bucket_sizes))
         train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
                                for i in xrange(len(train_bucket_sizes))]
