@@ -69,7 +69,7 @@ def hier_get_batch(config, max_set, query_set, answer_set, gen_set):
     train_answer = []
     train_labels = []
     half_size = batch_size / 2
-    for _ in range(half_size):
+    for _ in range(int(half_size)):
         index = random.randint(0, max_set)
         train_query.append(query_set[index])
         train_answer.append(answer_set[index])
