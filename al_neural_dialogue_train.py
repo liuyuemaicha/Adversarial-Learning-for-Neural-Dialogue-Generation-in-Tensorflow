@@ -124,7 +124,7 @@ def disc_step(sess, bucket_id, disc_model, train_query, train_answer, train_labe
     reward, gen_num = 0.0, 0
     for logit, label in zip(logits, train_labels):
         if int(label) == 0:
-            reward += logit[1]
+            reward += float(logit[1])
             gen_num += 1
     reward = reward / gen_num
 
@@ -271,7 +271,7 @@ def al_train():
 
 def main(_):
     # step_1 training gen model
-    gen_pre_train()
+    # gen_pre_train()
 
     # model test
     # gen_test()
@@ -283,7 +283,7 @@ def main(_):
     # disc_pre_train()
 
     # step_4 training al model
-    # al_train()
+    al_train()
 
     # model test
     # gen_test()
