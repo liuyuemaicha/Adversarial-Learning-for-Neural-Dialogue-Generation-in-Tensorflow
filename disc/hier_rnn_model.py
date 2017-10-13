@@ -18,17 +18,17 @@ class Hier_rnn_model(object):
         self.answer = []
         for i in range(buckets[-1][0]):
             self.query.append(tf.placeholder(dtype=tf.int32, shape=[None], name="query{0}".format(i)))
-        for i in xrange(buckets[-1][1]):
+        for i in range(buckets[-1][1]):
             self.answer.append(tf.placeholder(dtype=tf.int32, shape=[None], name="answer{0}".format(i)))
 
         self.target = tf.placeholder(dtype=tf.int64, shape=[None], name="target")
 
-        encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(emb_dim)
-        encoder_mutil = tf.nn.rnn_cell.MultiRNNCell([encoder_cell] * num_layers)
-        encoder_emb = tf.nn.rnn_cell.EmbeddingWrapper(encoder_mutil, embedding_classes=vocab_size, embedding_size=emb_dim)
+        encoder_cell = tf.contrib.rnn.BasicLSTMCell(emb_dim)
+        encoder_mutil = tf.contrib.rnn.MultiRNNCell([encoder_cell] * num_layers)
+        encoder_emb = tf.contrib.rnn.EmbeddingWrapper(encoder_mutil, embedding_classes=vocab_size, embedding_size=emb_dim)
 
-        context_cell = tf.nn.rnn_cell.BasicLSTMCell(num_units=emb_dim)
-        context_multi = tf.nn.rnn_cell.MultiRNNCell([context_cell] * num_layers)
+        context_cell = tf.contrib.rnn.BasicLSTMCell(num_units=emb_dim)
+        context_multi = tf.contrib.rnn.MultiRNNCell([context_cell] * num_layers)
 
         self.b_query_state = []
         self.b_answer_state = []
@@ -39,16 +39,16 @@ class Hier_rnn_model(object):
         self.b_train_op = []
         for i, bucket in enumerate(buckets):
             with tf.variable_scope(name_or_scope="Hier_RNN_encoder", reuse=True if i > 0 else None) as var_scope:
-                query_output, query_state = tf.nn.rnn(encoder_emb, inputs=self.query[:bucket[0]], dtype=tf.float32)
+                query_output, query_state = tf.contrib.rnn.static_rnn(encoder_emb, inputs=self.query[:bucket[0]], dtype=tf.float32)
                 # output [max_len, batch_size, emb_dim]   state [num_layer, 2, batch_size, emb_dim]
                 var_scope.reuse_variables()
-                answer_output, answer_state = tf.nn.rnn(encoder_emb, inputs=self.answer[:bucket[1]], dtype=tf.float32)
+                answer_output, answer_state = tf.contrib.rnn.static_rnn(encoder_emb, inputs=self.answer[:bucket[1]], dtype=tf.float32)
                 self.b_query_state.append(query_state)
                 self.b_answer_state.append(answer_state)
                 context_input = [query_state[-1][1], answer_state[-1][1]]
 
             with tf.variable_scope(name_or_scope="Hier_RNN_context", reuse=True if i > 0 else None):
-                output, state = tf.nn.rnn(context_multi, context_input, dtype=tf.float32)
+                output, state = tf.contrib.rnn.static_rnn(context_multi, context_input, dtype=tf.float32)
                 self.b_state.append(state)
                 top_state = state[-1][1]  # [batch_size, emb_dim]
 
@@ -59,7 +59,7 @@ class Hier_rnn_model(object):
                 self.b_logits.append(logits)
 
             with tf.name_scope("loss"):
-                loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, self.target)
+                loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=self.target)
                 mean_loss = tf.reduce_mean(loss)
                 self.b_loss.append(mean_loss)
 

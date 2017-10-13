@@ -5,7 +5,7 @@ import time
 import datetime
 import random
 import utils.data_utils as data_utils
-from hier_rnn_model import Hier_rnn_model
+from .hier_rnn_model import Hier_rnn_model
 from tensorflow.python.platform import gfile
 import sys
 
@@ -17,7 +17,7 @@ def evaluate(session, model, config, evl_inputs, evl_labels, evl_masks):
 
     fetches = [model.correct_num, model.prediction, model.logits, model.target]
     feed_dict = {}
-    for i in xrange(config.max_len):
+    for i in range(config.max_len):
         feed_dict[model.input_data[i].name] = evl_inputs[i]
     feed_dict[model.target.name] = evl_labels
     feed_dict[model.mask_x.name] = evl_masks
@@ -69,7 +69,7 @@ def hier_get_batch(config, max_set, query_set, answer_set, gen_set):
     train_answer = []
     train_labels = []
     half_size = batch_size / 2
-    for _ in range(half_size):
+    for _ in range(int(half_size)):
         index = random.randint(0, max_set)
         train_query.append(query_set[index])
         train_answer.append(answer_set[index])
@@ -121,13 +121,13 @@ def hier_train(config_disc, config_evl):
 
     with tf.Session() as session:
 
-        print "prepare_data"
+        print("prepare_data")
         query_set, answer_set, gen_set = prepare_data(config_disc)
 
-        train_bucket_sizes = [len(query_set[b]) for b in xrange(len(config_disc.buckets))]
+        train_bucket_sizes = [len(query_set[b]) for b in range(len(config_disc.buckets))]
         train_total_size = float(sum(train_bucket_sizes))
         train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
-                               for i in xrange(len(train_bucket_sizes))]
+                               for i in range(len(train_bucket_sizes))]
         #dev_query_set, dev_answer_set, dev_gen_set = hier_read_data(dev_query_path, dev_answer_path, dev_gen_path)
         for set in query_set:
             print("set length: ", len(set))
@@ -142,7 +142,7 @@ def hier_train(config_disc, config_evl):
 
         while True:
             random_number_01 = np.random.random_sample()
-            bucket_id = min([i for i in xrange(len(train_buckets_scale))
+            bucket_id = min([i for i in range(len(train_buckets_scale))
                              if train_buckets_scale[i] > random_number_01])
 
             start_time = time.time()
@@ -155,9 +155,9 @@ def hier_train(config_disc, config_evl):
             train_answer = np.transpose(train_answer)
 
             feed_dict = {}
-            for i in xrange(config_disc.buckets[bucket_id][0]):
+            for i in range(config_disc.buckets[bucket_id][0]):
                 feed_dict[model.query[i].name] = train_query[i]
-            for i in xrange(config_disc.buckets[bucket_id][1]):
+            for i in range(config_disc.buckets[bucket_id][1]):
                 feed_dict[model.answer[i].name] = train_answer[i]
             feed_dict[model.target.name] = train_labels
 

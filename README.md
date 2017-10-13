@@ -6,7 +6,7 @@ the paper: Adversarial Learning for Neural Dialogue Generation    https://arxiv.
 the paper translation in Chinese :http://blog.csdn.net/liuyuemaicha/article/details/60581187
 ## Config:
 
-TensorFlow 0.12.0  Python 2.7
+TensorFlow 1.2.1  Python 3.6.1
 
 ## Introduction to Project: al_neural_dialogue 
 
