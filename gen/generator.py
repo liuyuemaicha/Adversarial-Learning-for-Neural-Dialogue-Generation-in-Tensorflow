@@ -18,7 +18,9 @@ import utils.data_utils as data_utils
 import utils.conf as conf
 import gen.gen_model as seq2seq_model
 from tensorflow.python.platform import gfile
+
 sys.path.append('../utils')
+
 
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
@@ -38,7 +40,8 @@ def read_data(config, source_path, target_path, max_size=None):
                 source_ids = [int(x) for x in source.split()]
                 target_ids = [int(x) for x in target.split()]
                 target_ids.append(data_utils.EOS_ID)
-                for bucket_id, (source_size, target_size) in enumerate(config.buckets): #[bucket_id, (source_size, target_size)]
+                for bucket_id, (source_size, target_size) in enumerate(
+                        config.buckets):  # [bucket_id, (source_size, target_size)]
                     if len(source_ids) < source_size and len(target_ids) < target_size:
                         data_set[bucket_id].append([source_ids, target_ids])
                         break
@@ -49,7 +52,8 @@ def read_data(config, source_path, target_path, max_size=None):
 def create_model(session, gen_config, forward_only, name_scope, initializer=None):
     """Create translation model and initialize or load parameters in session."""
     with tf.variable_scope(name_or_scope=name_scope, initializer=initializer):
-        model = seq2seq_model.Seq2SeqModel(gen_config,  name_scope=name_scope, forward_only=forward_only)
+        model = seq2seq_model.Seq2SeqModel(gen_config, name_scope=name_scope, forward_only=forward_only,
+                                           dtype=tf.float32)
         gen_ckpt_dir = os.path.abspath(os.path.join(gen_config.train_dir, "checkpoints"))
         ckpt = tf.train.get_checkpoint_state(gen_ckpt_dir)
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
@@ -64,18 +68,21 @@ def create_model(session, gen_config, forward_only, name_scope, initializer=None
 
 def prepare_data(gen_config):
     train_path = os.path.join(gen_config.train_dir, "chitchat.train")
-    voc_file_path = [train_path+".answer", train_path+".query"]
+    voc_file_path = [train_path + ".answer", train_path + ".query"]
     vocab_path = os.path.join(gen_config.train_dir, "vocab%d.all" % gen_config.vocab_size)
+    # creating the vocabulary file
     data_utils.create_vocabulary(vocab_path, voc_file_path, gen_config.vocab_size)
+    # loading the vocabulary into memory
     vocab, rev_vocab = data_utils.initialize_vocabulary(vocab_path)
 
     print("Preparing Chitchat gen_data in %s" % gen_config.train_dir)
+    # preparing the train files encoded as the vocabulary indexes
     train_query, train_answer, dev_query, dev_answer = data_utils.prepare_chitchat_data(
         gen_config.train_dir, vocab, gen_config.vocab_size)
 
     # Read disc_data into buckets and compute their sizes.
-    print ("Reading development and training gen_data (limit: %d)."
-               % gen_config.max_train_data_size)
+    print("Reading development and training gen_data (limit: %d)."
+          % gen_config.max_train_data_size)
     dev_set = read_data(gen_config, dev_query, dev_answer)
     train_set = read_data(gen_config, train_query, train_answer, gen_config.max_train_data_size)
 
@@ -88,17 +95,18 @@ def softmax(x):
 
 
 def train(gen_config):
+    # creating and loading the vocabulary and the train and dev data
     vocab, rev_vocab, dev_set, train_set = prepare_data(gen_config)
     for b_set in train_set:
         print("b_set: ", len(b_set))
 
     with tf.Session() as sess:
-    #with tf.device("/gpu:1"):
-        # Create model.
+        # with tf.device("/gpu:1"):
+        # Create or load Seq2Seq model.
         print("Creating %d layers of %d units." % (gen_config.num_layers, gen_config.emb_dim))
         model = create_model(sess, gen_config, forward_only=False, name_scope=gen_config.name_model)
 
-        train_bucket_sizes = [len(train_set[b]) for b in xrange(len(gen_config.buckets))]
+        train_bucket_sizes = [len(train_set[b]) for b in range(len(gen_config.buckets))]
         train_total_size = float(sum(train_bucket_sizes))
         train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
                                for i in xrange(len(train_bucket_sizes))]
@@ -106,7 +114,7 @@ def train(gen_config):
         # This is the training loop.
         step_time, loss = 0.0, 0.0
         current_step = 0
-        #previous_losses = []
+        # previous_losses = []
 
         gen_loss_summary = tf.Summary()
         gen_writer = tf.summary.FileWriter(gen_config.tensorboard_dir, sess.graph)
@@ -122,7 +130,8 @@ def train(gen_config):
             encoder_inputs, decoder_inputs, target_weights, batch_source_encoder, batch_source_decoder = model.get_batch(
                 train_set, bucket_id, gen_config.batch_size)
 
-            _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=False)
+            _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id,
+                                         forward_only=False)
 
             step_time += (time.time() - start_time) / gen_config.steps_per_checkpoint
             loss += step_loss / gen_config.steps_per_checkpoint
@@ -138,9 +147,9 @@ def train(gen_config):
 
                 # Print statistics for the previous epoch.
                 perplexity = math.exp(loss) if loss < 300 else float('inf')
-                print ("global step %d learning rate %.4f step-time %.2f perplexity "
-                       "%.2f" % (model.global_step.eval(), model.learning_rate.eval(),
-                                 step_time, perplexity))
+                print("global step %d learning rate %.4f step-time %.2f perplexity "
+                      "%.2f" % (model.global_step.eval(), model.learning_rate.eval(),
+                                step_time, perplexity))
                 # Decrease learning rate if no improvement was seen over last 3 times.
                 # if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
                 #     sess.run(model.learning_rate_decay_op)
@@ -148,13 +157,12 @@ def train(gen_config):
                 # Save checkpoint and zero timer and loss.
 
                 if current_step % (gen_config.steps_per_checkpoint * 3) == 0:
-                    print("current_step: %d, save model" %(current_step))
+                    print("current_step: %d, save model" % (current_step))
                     gen_ckpt_dir = os.path.abspath(os.path.join(gen_config.train_dir, "checkpoints"))
                     if not os.path.exists(gen_ckpt_dir):
                         os.makedirs(gen_ckpt_dir)
                     checkpoint_path = os.path.join(gen_ckpt_dir, "chitchat.model")
                     model.saver.save(sess, checkpoint_path, global_step=model.global_step)
-
 
                 step_time, loss = 0.0, 0.0
                 # Run evals on development set and print their perplexity.
@@ -182,9 +190,9 @@ def test_decoder(gen_config):
         sys.stdout.write("> ")
         sys.stdout.flush()
         sentence = sys.stdin.readline()
-        while sentence:
+        while sentence and sentence != "\n":
             token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), vocab)
-            print("token_id: ", token_ids)
+            # print("token_id: ", token_ids)
             bucket_id = len(gen_config.buckets) - 1
             for i, bucket in enumerate(gen_config.buckets):
                 if bucket[0] >= len(token_ids):
@@ -194,16 +202,16 @@ def test_decoder(gen_config):
                 print("Sentence truncated: %s", sentence)
 
             encoder_inputs, decoder_inputs, target_weights, _, _ = model.get_batch({bucket_id: [(token_ids, [1])]},
-                                                         bucket_id, model.batch_size, type=0)
+                                                                                   bucket_id, model.batch_size, type=0)
 
-            print("bucket_id: ", bucket_id)
-            print("encoder_inputs:", encoder_inputs)
-            print("decoder_inputs:", decoder_inputs)
-            print("target_weights:", target_weights)
+            # print("bucket_id: ", bucket_id)
+            # print("encoder_inputs:", encoder_inputs)
+            # print("decoder_inputs:", decoder_inputs)
+            # print("target_weights:", target_weights)
 
             _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
 
-            print("output_logits", np.shape(output_logits))
+            # print("output_logits", np.shape(output_logits))
 
             outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
 
@@ -262,7 +270,6 @@ def decoder(gen_config):
                     resps.append(seq[:gen_config.buckets[bucket_id][1]])
 
             for query, answer, resp in zip(batch_source_encoder, batch_source_decoder, resps):
-
                 answer_str = " ".join([str(rev_vocab[an]) for an in answer][:-1])
                 disc_train_answer.write(answer_str)
                 disc_train_answer.write("\n")
@@ -281,8 +288,6 @@ def decoder(gen_config):
         disc_train_query.close()
         disc_train_answer.close()
     pass
-
-
 
 
 def decoder_bk(gen_config):
@@ -309,7 +314,8 @@ def decoder_bk(gen_config):
             encoder_inputs, decoder_inputs, target_weights, batch_source_encoder, batch_source_decoder = model.get_batch(
                 train_set, bucket_id, gen_config.batch_size)
 
-            _, _, out_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, forward_only=True)
+            _, _, out_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id,
+                                          forward_only=True)
 
             tokens = []
             resps = []
@@ -347,9 +353,9 @@ def decoder_bk(gen_config):
 
 
 def get_predicted_sentence(sess, input_token_ids, vocab, model,
-                           beam_size, buckets, mc_search=True,debug=False):
+                           beam_size, buckets, mc_search=True, debug=False):
     def model_step(enc_inp, dec_inp, dptr, target_weights, bucket_id):
-        #model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
+        # model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
         _, _, logits = model.step(sess, enc_inp, dec_inp, target_weights, bucket_id, True)
         prob = softmax(logits[dptr][0])
         # print("model_step @ %s" % (datetime.now()))
@@ -359,7 +365,7 @@ def get_predicted_sentence(sess, input_token_ids, vocab, model,
         selected_token_ids = [int(np.argmax(logit, axis=1)) for logit in output_logits]
         return selected_token_ids
 
-    #input_token_ids = data_utils.sentence_to_token_ids(input_sentence, vocab)
+    # input_token_ids = data_utils.sentence_to_token_ids(input_sentence, vocab)
     # Which bucket does it belong to?
     bucket_id = min([b for b in range(len(buckets)) if buckets[b][0] > len(input_token_ids)])
     outputs = []
@@ -375,59 +381,60 @@ def get_predicted_sentence(sess, input_token_ids, vocab, model,
         return [{"dec_inp": greedy_dec(output_logits), 'prob': 1}]
 
     # Get output logits for the sentence. # initialize beams as (log_prob, empty_string, eos)
-    beams, new_beams, results = [(1, {'eos': 0, 'dec_inp': decoder_inputs, 'prob': 1, 'prob_ts': 1, 'prob_t': 1})], [], []
+    beams, new_beams, results = [(1,
+                                  {'eos': 0, 'dec_inp': decoder_inputs, 'prob': 1, 'prob_ts': 1, 'prob_t': 1})], [], []
 
-    for dptr in range(len(decoder_inputs)-1):
-      if dptr > 0:
-        target_weights[dptr] = [1.]
-        beams, new_beams = new_beams[:beam_size], []
-      if debug: print("=====[beams]=====", beams)
-      heapq.heapify(beams)  # since we will srot and remove something to keep N elements
-      for prob, cand in beams:
-        if cand['eos']:
-          results += [(prob, cand)]
-          continue
+    for dptr in range(len(decoder_inputs) - 1):
+        if dptr > 0:
+            target_weights[dptr] = [1.]
+            beams, new_beams = new_beams[:beam_size], []
+        if debug: print("=====[beams]=====", beams)
+        heapq.heapify(beams)  # since we will srot and remove something to keep N elements
+        for prob, cand in beams:
+            if cand['eos']:
+                results += [(prob, cand)]
+                continue
 
-        all_prob_ts = model_step(encoder_inputs, cand['dec_inp'], dptr, target_weights, bucket_id)
-        all_prob_t  = [0]*len(all_prob_ts)
-        all_prob    = all_prob_ts
+            all_prob_ts = model_step(encoder_inputs, cand['dec_inp'], dptr, target_weights, bucket_id)
+            all_prob_t = [0] * len(all_prob_ts)
+            all_prob = all_prob_ts
 
-        # suppress copy-cat (respond the same as input)
-        if dptr < len(input_token_ids):
-          all_prob[input_token_ids[dptr]] = all_prob[input_token_ids[dptr]] * 0.01
+            # suppress copy-cat (respond the same as input)
+            if dptr < len(input_token_ids):
+                all_prob[input_token_ids[dptr]] = all_prob[input_token_ids[dptr]] * 0.01
 
-        # beam search
-        for c in np.argsort(all_prob)[::-1][:beam_size]:
-          new_cand = {
-            'eos'     : (c == data_utils.EOS_ID),
-            'dec_inp' : [(np.array([c]) if i == (dptr+1) else k) for i, k in enumerate(cand['dec_inp'])],
-            'prob_ts' : cand['prob_ts'] * all_prob_ts[c],
-            'prob_t'  : cand['prob_t'] * all_prob_t[c],
-            'prob'    : cand['prob'] * all_prob[c],
-          }
-          new_cand = (new_cand['prob'], new_cand) # for heapq can only sort according to list[0]
+            # beam search
+            for c in np.argsort(all_prob)[::-1][:beam_size]:
+                new_cand = {
+                    'eos': (c == data_utils.EOS_ID),
+                    'dec_inp': [(np.array([c]) if i == (dptr + 1) else k) for i, k in enumerate(cand['dec_inp'])],
+                    'prob_ts': cand['prob_ts'] * all_prob_ts[c],
+                    'prob_t': cand['prob_t'] * all_prob_t[c],
+                    'prob': cand['prob'] * all_prob[c],
+                }
+                new_cand = (new_cand['prob'], new_cand)  # for heapq can only sort according to list[0]
 
-          if (len(new_beams) < beam_size):
-            heapq.heappush(new_beams, new_cand)
-          elif (new_cand[0] > new_beams[0][0]):
-            heapq.heapreplace(new_beams, new_cand)
+                if (len(new_beams) < beam_size):
+                    heapq.heappush(new_beams, new_cand)
+                elif (new_cand[0] > new_beams[0][0]):
+                    heapq.heapreplace(new_beams, new_cand)
 
     results += new_beams  # flush last cands
 
     # post-process results
     res_cands = []
     for prob, cand in sorted(results, reverse=True):
-      res_cands.append(cand)
+        res_cands.append(cand)
     return res_cands
 
 
-def gen_sample(sess ,gen_config, model, vocab, source_inputs, source_outputs, mc_search=True):
+def gen_sample(sess, gen_config, model, vocab, source_inputs, source_outputs, mc_search=True):
     sample_inputs = []
-    sample_labels =[]
+    sample_labels = []
     rep = []
 
     for source_query, source_answer in zip(source_inputs, source_outputs):
-        sample_inputs.append(source_query+source_answer)
+        sample_inputs.append(source_query + source_answer)
         sample_labels.append(1)
         responses = get_predicted_sentence(sess, source_query, vocab,
                                            model, gen_config.beam_size, gen_config.buckets, mc_search)
