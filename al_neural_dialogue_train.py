@@ -53,7 +53,7 @@ def disc_train_data(sess, gen_model, vocab, source_inputs, source_outputs,
 
 
     def decoder(num_roll):
-        for _ in range(num_roll):
+        for _ in xrange(num_roll):
             _, _, output_logits = gen_model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id,
                                                  forward_only=True, mc_search=mc_search)
 
@@ -100,11 +100,11 @@ def softmax(x):
 def disc_step(sess, bucket_id, disc_model, train_query, train_answer, train_labels, forward_only=False):
     feed_dict={}
 
-    for i in range(len(train_query)):
+    for i in xrange(len(train_query)):
 
         feed_dict[disc_model.query[i].name] = train_query[i]
 
-    for i in range(len(train_answer)):
+    for i in xrange(len(train_answer)):
         feed_dict[disc_model.answer[i].name] = train_answer[i]
 
     feed_dict[disc_model.target.name]=train_labels
@@ -124,7 +124,7 @@ def disc_step(sess, bucket_id, disc_model, train_query, train_answer, train_labe
     reward, gen_num = 0.0, 0
     for logit, label in zip(logits, train_labels):
         if int(label) == 0:
-            reward += float(logit[1])
+            reward += logit[1]
             gen_num += 1
     reward = reward / gen_num
 
@@ -139,10 +139,10 @@ def al_train():
         for set in train_set:
             print("al train len: ", len(set))
 
-        train_bucket_sizes = [len(train_set[b]) for b in range(len(gen_config.buckets))]
+        train_bucket_sizes = [len(train_set[b]) for b in xrange(len(gen_config.buckets))]
         train_total_size = float(sum(train_bucket_sizes))
         train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
-                               for i in range(len(train_bucket_sizes))]
+                               for i in xrange(len(train_bucket_sizes))]
 
         disc_model = h_disc.create_model(sess, disc_config, disc_config.name_model)
         gen_model = gens.create_model(sess, gen_config, forward_only=False, name_scope=gen_config.name_model)
@@ -159,7 +159,7 @@ def al_train():
             current_step += 1
             start_time = time.time()
             random_number_01 = np.random.random_sample()
-            bucket_id = min([i for i in range(len(train_buckets_scale))
+            bucket_id = min([i for i in xrange(len(train_buckets_scale))
                          if train_buckets_scale[i] > random_number_01])
             # disc_config.max_len = gen_config.buckets[bucket_id][0] + gen_config.buckets[bucket_id][1]
 
@@ -176,7 +176,7 @@ def al_train():
                 print("train_query: ", len(train_query))
                 print("train_answer: ", len(train_answer))
                 print("train_labels: ", len(train_labels))
-                for i in range(len(train_query)):
+                for i in xrange(len(train_query)):
                     print("lable: ", train_labels[i])
                     print("train_answer_sentence: ", train_answer[i])
                     print(" ".join([tf.compat.as_str(rev_vocab[output]) for output in train_answer[i]]))
@@ -199,7 +199,7 @@ def al_train():
 
             print("=============================mc_search: True====================================")
             if current_step % 200 == 0:
-                for i in range(len(train_query)):
+                for i in xrange(len(train_query)):
                     print("lable: ", train_labels[i])
                     print(" ".join([tf.compat.as_str(rev_vocab[output]) for output in train_answer[i]]))
 
@@ -271,7 +271,7 @@ def al_train():
 
 def main(_):
     # step_1 training gen model
-    # gen_pre_train()
+    gen_pre_train()
 
     # model test
     # gen_test()
@@ -283,7 +283,7 @@ def main(_):
     # disc_pre_train()
 
     # step_4 training al model
-    al_train()
+    # al_train()
 
     # model test
     # gen_test()
