@@ -267,9 +267,25 @@ def prepare_chitchat_data(data_dir, vocabulary, vocabulary_size, tokenizer=None)
       (6) path to the French vocabulary file.
   """
   # Get wmt disc_data to the specified directory.
+  #train_path = get_wmt_enfr_train_set(data_dir)
   train_path = os.path.join(data_dir, "chitchat.train")
+  #dev_path = get_wmt_enfr_dev_set(data_dir)
   dev_path = os.path.join(data_dir, "chitchat.dev")
+  # fixed_path = os.path.join(data_dir, "chitchat.fixed")
+  # weibo_path = os.path.join(data_dir, "chitchat.weibo")
+  # qa_path = os.path.join(data_dir, "chitchat.qa")
 
+  # voc_file_path = [train_path+".answer", fixed_path+".answer", weibo_path+".answer", qa_path+".answer",
+  #                    train_path+".query", fixed_path+".query", weibo_path+".query", qa_path+".query"]
+  #voc_query_path = [train_path+".query", fixed_path+".query", weibo_path+".query", qa_path+".query"]
+  # Create vocabularies of the appropriate sizes.
+  #vocab_path = os.path.join(data_dir, "vocab%d.all" % vocabulary_size)
+  #query_vocab_path = os.path.join(data_dir, "vocab%d.query" % en_vocabulary_size)
+
+  #create_vocabulary(vocab_path, voc_file_path, vocabulary_size)
+
+
+  #create_vocabulary(query_vocab_path, voc_query_path, en_vocabulary_size)
 
   # Create token ids for the training disc_data.
   answer_train_ids_path = train_path + (".ids%d.answer" % vocabulary_size)
